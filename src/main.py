@@ -285,11 +285,7 @@ class NovelDownloader:
     def _default_progress(self, current: int, total: int, desc: str = '',
                           chapter_title: str = None):
         """Progress tracking for both CLI and web"""
-        # For CLI: Use tqdm directly
-        if not hasattr(self, '_pbar'):
-            self._pbar = tqdm(total=total, desc=desc)
-        self._pbar.update(1)  # Update by 1 instead of setting n directly
-
+        # For CLI: Don't create additional progress bar, tqdm is already handled in download_novel
         # For web: Return progress info as dict
         return {
             'current': current,
@@ -1673,7 +1669,7 @@ class NovelDownloader:
             return 'err'
     
     def _generate_pdf_from_latex(self, safe_name: str, output_dir: str) -> str:
-        """使用pdflatex将LaTeX文件编译为PDF"""
+        """使用xelatex将LaTeX文件编译为PDF"""
         try:
             import subprocess
             
@@ -1684,43 +1680,76 @@ class NovelDownloader:
             if not os.path.exists(latex_path):
                 raise Exception(f'LaTeX文件不存在: {latex_path}')
             
-            # 检查pdflatex是否可用
+            # 检查xelatex是否可用
             try:
-                subprocess.run(['pdflatex', '--version'], capture_output=True, check=True)
+                subprocess.run(['xelatex', '--version'], capture_output=True, check=True)
             except (subprocess.CalledProcessError, FileNotFoundError):
-                raise Exception('pdflatex未安装或不在PATH中。请安装LaTeX发行版（如TeX Live或MiKTeX）')
+                raise Exception('xelatex未安装或不在PATH中。请安装LaTeX发行版（如TeX Live或MiKTeX）')
             
             # 编译LaTeX为PDF
-            self.log_callback('正在使用pdflatex编译PDF...')
+            self.log_callback('正在使用xelatex编译PDF...')
             
-            # 切换到输出目录执行pdflatex
+            # 切换到输出目录执行xelatex，确保工作目录就是latex文件的目录
             original_cwd = os.getcwd()
             try:
                 os.chdir(output_dir)
                 
-                # 运行pdflatex，通常需要运行两次以正确生成目录和引用
+                # 运行xelatex，必须运行两次以正确生成目录和引用
                 for i in range(2):
+                    self.log_callback(f'执行第{i+1}次xelatex编译...')
+                    # 修复编码问题：使用bytes模式而不是text模式
                     result = subprocess.run(
-                        ['pdflatex', '-interaction=nonstopmode', latex_file],
+                        ['xelatex', '-interaction=nonstopmode', latex_file],
                         capture_output=True,
-                        text=True,
+                        text=False,  # 使用bytes模式避免编码问题
                         timeout=300  # 5分钟超时
                     )
                     
                     if result.returncode != 0:
                         # 如果失败，尝试查看日志
                         log_file = f'{safe_name}.log'
-                        error_info = f'pdflatex编译失败 (返回码: {result.returncode})'
-                        if os.path.exists(log_file):
-                            # 读取最后几行日志
+                        error_info = f'xelatex编译失败 (返回码: {result.returncode})'
+                        
+                        # 获取stderr输出（如果有）
+                        if result.stderr:
                             try:
-                                with open(log_file, 'r', encoding='utf-8', errors='ignore') as log_f:
-                                    lines = log_f.readlines()
-                                    # 取最后20行
-                                    error_lines = lines[-20:] if len(lines) > 20 else lines
-                                    error_info += '\n最后几行日志:\n' + ''.join(error_lines)
+                                # 尝试多种编码解码stderr
+                                stderr_text = None
+                                for encoding in ['utf-8', 'gbk', 'latin1']:
+                                    try:
+                                        stderr_text = result.stderr.decode(encoding)
+                                        break
+                                    except UnicodeDecodeError:
+                                        continue
+                                
+                                if stderr_text:
+                                    error_info += f'\n编译输出: {stderr_text[:500]}...'  # 限制长度
                             except:
-                                pass
+                                error_info += '\n编译输出: <无法解码的输出>'
+                        
+                        # 尝试读取日志文件
+                        if os.path.exists(log_file):
+                            try:
+                                # 尝试多种编码读取日志文件
+                                log_content = None
+                                for encoding in ['utf-8', 'gbk', 'latin1']:
+                                    try:
+                                        with open(log_file, 'r', encoding=encoding) as log_f:
+                                            lines = log_f.readlines()
+                                            # 取最后20行
+                                            error_lines = lines[-20:] if len(lines) > 20 else lines
+                                            log_content = ''.join(error_lines)
+                                            break
+                                    except UnicodeDecodeError:
+                                        continue
+                                
+                                if log_content:
+                                    error_info += f'\n最后几行日志:\n{log_content}'
+                                else:
+                                    error_info += '\n日志文件: <无法解码>'
+                            except Exception as e:
+                                error_info += f'\n读取日志失败: {str(e)}'
+                        
                         raise Exception(error_info)
                 
                 # 检查PDF是否生成成功
