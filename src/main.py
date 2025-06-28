@@ -258,6 +258,9 @@ class NovelDownloader:
         self.total_empty_count = 0    # 总计空内容计数
         self.adaptive_delay_multiplier = 1.0  # 自适应延时倍数
         self.last_successful_time = time.time()  # 上次成功时间
+        
+        # 🔄 策略2：成功下载计数器（用于主动Cookie刷新）
+        self.successful_downloads = 0
 
     def _setup_directories(self):
         """Create necessary directories if they don't exist"""
@@ -324,6 +327,210 @@ class NovelDownloader:
         except Exception as e:
             # 避免日志写入失败影响主程序
             pass
+
+    def _get_randomized_headers(self) -> Dict[str, str]:
+        """🎭 策略3：生成高度真实化的随机请求头，模拟真实用户行为（20+种变化）"""
+        
+        # 🌟 大幅扩展User-Agent池（20+种真实浏览器）
+        user_agents = [
+            # Chrome最新版本 - Windows
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0',
+            
+            # Chrome - macOS
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            
+            # Safari - macOS
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15',
+            
+            # Firefox - Windows & macOS
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:122.0) Gecko/20100101 Firefox/122.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0',
+            
+            # Edge - Windows
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+            
+            # 移动端User-Agent（偶尔使用增加真实性）
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1',
+            'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36',
+            
+            # 一些稍旧但仍然真实的版本
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
+        ]
+        
+        # 🌐 扩展Accept-Language池（真实地区变化）
+        accept_languages = [
+            'zh-CN,zh;q=0.9,en;q=0.8',
+            'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+            'zh-CN,zh;q=0.9,en;q=0.8,ja;q=0.7',
+            'zh-CN,zh;q=0.9',
+            'zh,en-US;q=0.8,en;q=0.6',
+            'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+            'zh-CN,zh-TW;q=0.9,zh;q=0.8,en;q=0.7',
+            'zh-CN,zh;q=0.8,en;q=0.6,ja;q=0.4',
+            'zh-CN,zh;q=0.9,en-GB;q=0.8,en;q=0.7,zh-TW;q=0.6'
+        ]
+        
+        # 📋 扩展Accept池（更真实的浏览器行为）
+        accepts = [
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'
+        ]
+        
+        # 🗜️ 扩展Accept-Encoding池
+        accept_encodings = [
+            'gzip, deflate, br',
+            'gzip, deflate',
+            'gzip, deflate, br, zstd',
+            'gzip, deflate, br',
+            'gzip, deflate, compress, br',
+            'gzip, br, deflate'
+        ]
+        
+        # 🔗 真实的Connection选项
+        connections = ['keep-alive', 'close']
+        
+        # 💾 真实的Cache-Control选项
+        cache_controls = [
+            'no-cache',
+            'max-age=0',
+            'no-store',
+            'max-age=0, no-cache',
+            'no-cache, no-store, must-revalidate',
+            'max-age=3600'
+        ]
+        
+        # 🌍 真实的Referer选项（模拟从不同页面访问）
+        referers = [
+            'https://fanqienovel.com/',
+            'https://fanqienovel.com/page',
+            'https://www.google.com/',
+            'https://www.baidu.com/',
+            'https://fanqienovel.com/search',
+            None  # 有时候没有referer
+        ]
+        
+        # 🔒 真实的Sec-Fetch系列
+        sec_fetch_dests = ['document', 'empty', 'iframe']
+        sec_fetch_modes = ['navigate', 'cors', 'no-cors', 'same-origin']  
+        sec_fetch_sites = ['none', 'same-origin', 'same-site', 'cross-site']
+        sec_fetch_users = ['?1', None]  # 有时候没有这个头
+        
+        # 🎯 选择User-Agent并基于它确定浏览器类型
+        selected_ua = random.choice(user_agents)
+        is_chrome = 'Chrome' in selected_ua and 'Edg' not in selected_ua
+        is_firefox = 'Firefox' in selected_ua
+        is_safari = 'Safari' in selected_ua and 'Chrome' not in selected_ua
+        is_edge = 'Edg' in selected_ua
+        is_mobile = 'Mobile' in selected_ua
+        
+        base_headers = self.headers.copy()
+        
+        # 🎭 构建真实的随机化请求头
+        randomized_headers = {
+            **base_headers,
+            'User-Agent': selected_ua,
+            'Accept': random.choice(accepts),
+            'Accept-Language': random.choice(accept_languages),
+            'Accept-Encoding': random.choice(accept_encodings),
+            'Connection': random.choice(connections),
+            'Cache-Control': random.choice(cache_controls),
+        }
+        
+        # 🌍 随机添加Referer（80%概率）
+        if random.random() > 0.2:
+            referer = random.choice(referers)
+            if referer:
+                randomized_headers['Referer'] = referer
+        
+        # 🔒 Chrome/Edge特有的Sec-Fetch头部
+        if is_chrome or is_edge:
+            randomized_headers['Sec-Fetch-Dest'] = random.choice(sec_fetch_dests)
+            randomized_headers['Sec-Fetch-Mode'] = random.choice(sec_fetch_modes)
+            randomized_headers['Sec-Fetch-Site'] = random.choice(sec_fetch_sites)
+            
+            # Sec-Fetch-User（导航时才有）
+            if random.choice(sec_fetch_users):
+                randomized_headers['Sec-Fetch-User'] = '?1'
+                
+            # Sec-CH系列（Chrome特有）
+            if is_chrome and random.random() > 0.5:
+                randomized_headers['Sec-CH-UA'] = '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"'
+                randomized_headers['Sec-CH-UA-Mobile'] = '?1' if is_mobile else '?0'
+                randomized_headers['Sec-CH-UA-Platform'] = f'"{random.choice(["Windows", "macOS", "Linux"])}"'
+        
+        # 🚫 DNT头部（60%概率）
+        if random.random() > 0.4:
+            randomized_headers['DNT'] = '1'
+        
+        # 🔒 Upgrade-Insecure-Requests（70%概率）
+        if random.random() > 0.3:
+            randomized_headers['Upgrade-Insecure-Requests'] = '1'
+            
+        # 📱 移动端特有头部
+        if is_mobile:
+            randomized_headers['Viewport-Width'] = str(random.choice([375, 414, 390, 393]))
+            if random.random() > 0.5:
+                randomized_headers['Device-Memory'] = str(random.choice([4, 6, 8]))
+        
+        # 🕰️ Pragma头部（偶尔添加，10%概率）
+        if random.random() > 0.9:
+            randomized_headers['Pragma'] = 'no-cache'
+            
+        # 🌍 Host头部（总是设置为目标站点）
+        randomized_headers['Host'] = 'fanqienovel.com'
+        
+        # 🔧 浏览器特有的其他头部
+        
+        # Firefox特有
+        if is_firefox and random.random() > 0.7:
+            randomized_headers['Accept-Language'] = randomized_headers['Accept-Language'].replace('q=0.', 'q=0.')
+            
+        # Safari特有  
+        if is_safari and random.random() > 0.6:
+            randomized_headers['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+            
+        # 随机移除某些可选头部（模拟不同浏览器配置）
+        optional_headers = ['DNT', 'Pragma', 'Sec-CH-UA', 'Device-Memory', 'Viewport-Width']
+        for header in optional_headers:
+            if header in randomized_headers and random.random() > 0.8:
+                del randomized_headers[header]
+        
+        # 📊 记录使用的请求头类型（用于调试）
+        browser_type = 'Chrome' if is_chrome else 'Firefox' if is_firefox else 'Safari' if is_safari else 'Edge' if is_edge else 'Unknown'
+        self._write_debug_log(f"🎭 使用{browser_type}请求头模拟，共{len(randomized_headers)}个头部")
+        
+        return randomized_headers
+
+    def _smart_reading_pause(self, chapter_title: str = ""):
+        """🎭 策略3：模拟真实阅读行为的随机暂停 (0-5秒)"""
+        pause_duration = random.uniform(0, 5.0)  # 0到5秒的随机暂停
+        
+        if pause_duration > 0.1:  # 只记录超过0.1秒的暂停
+            self._write_debug_log(f"🎭 模拟阅读暂停 {pause_duration:.2f}秒 {'- ' + chapter_title if chapter_title else ''}")
+        
+        time.sleep(pause_duration)
+
+    def _should_refresh_cookie_proactively(self) -> bool:
+        """🔄 策略2：检查是否应该主动刷新Cookie"""
+        # 🚨 更激进：每20个章节主动刷新一次
+        return hasattr(self, 'successful_downloads') and self.successful_downloads > 0 and self.successful_downloads % 20 == 0
 
     def download_novel(self, novel_id: int) -> str:
         """Download a novel"""
@@ -902,10 +1109,23 @@ class NovelDownloader:
                 self.empty_content_count = 0  # 重置连续空内容计数
                 self.last_successful_time = time.time()
                 
+                # 🔄 策略2：增加成功下载计数器
+                self.successful_downloads += 1
+                
+                # 🔄 策略2：检查是否需要主动刷新Cookie（每20个章节）
+                if self._should_refresh_cookie_proactively():
+                    effective_chapter_id = int(chapter_id) if chapter_id else (self.tzj if self.tzj else 1)
+                    self._write_debug_log(f"🔄 策略2：第{self.successful_downloads}个章节，主动刷新Cookie (chapter_id: {effective_chapter_id})")
+                    self._get_new_cookie(effective_chapter_id)
+                    self.log_callback(f"🔄 策略2：已下载{self.successful_downloads}个章节，主动刷新Cookie（每20章节策略）")
+                
                 # 根据成功情况调整延时倍数
                 if self.adaptive_delay_multiplier > 1.0:
                     self.adaptive_delay_multiplier = max(1.0, self.adaptive_delay_multiplier - 0.1)
                     self._write_debug_log(f"📈 下载成功，降低延时倍数至: {self.adaptive_delay_multiplier:.1f}")
+                
+                # 🎭 策略3：模拟真实阅读行为
+                self._smart_reading_pause(title)
                 
                 # 自适应延时
                 base_delay_ms = random.randint(self.config.delay[0], self.config.delay[1])
@@ -941,15 +1161,15 @@ class NovelDownloader:
                     # 🚨 用户要求：明确失败原因
                     failure_reason = self._get_failure_reason(e)
                     
-                    # 🚨 用户要求：重试时的Cookie刷新检查
+                    # 🚨 策略2：更激进的Cookie刷新检查（失败1次就刷新）
                     cookie_action = ""
-                    if self.tcs > 3:  # 降低Cookie刷新阈值，让重试时更容易触发
+                    if self.tcs > 0:  # 策略2：失败1次就尝试刷新Cookie
                         self.tcs = 0
                         # 修复Cookie刷新：使用有效的chapter_id
                         effective_chapter_id = int(chapter_id) if chapter_id else (self.tzj if self.tzj else 1)
-                        self._write_debug_log(f"🔄 重试时触发Cookie刷新 (effective_chapter_id: {effective_chapter_id})")
+                        self._write_debug_log(f"🔄 策略2：失败1次即刷新Cookie (effective_chapter_id: {effective_chapter_id})")
                         self._get_new_cookie(effective_chapter_id)
-                        cookie_action = " (已刷新Cookie)"
+                        cookie_action = " (策略2: 已刷新Cookie)"
                     
                     self._write_debug_log(f"⏳ 等待 {retry_delay}s 后重试... (重试间隔配置索引: {attempt_index})")
                     
@@ -1507,7 +1727,8 @@ class NovelDownloader:
 
     def _download_chapter_content(self, chapter_id: int, test_mode: bool = False) -> str:
         """Download content with fallback and enhanced error handling"""
-        headers = self.headers.copy()
+        # 🎭 策略3：使用随机化的真实请求头
+        headers = self._get_randomized_headers()
         headers['cookie'] = self.cookie
 
         for attempt in range(3):
