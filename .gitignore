@@ -1,6 +1,8 @@
 data
 novel_downloads
-
+src/data/
+src/bookstore/
+src/novel_downloads/
 
 # python
 

@@ -139,6 +139,19 @@ class NovelDownloader:
             safe_name = self._sanitize_filename(name)
             self.log_callback(f'\n开始下载《{name}》，状态：{status[0]}')
 
+            # 创建"书名-id"文件夹结构
+            book_folder_name = f"{safe_name}-{novel_id}"
+            book_txt_dir = os.path.join(self.novel_downloads_dir, book_folder_name)
+            book_json_dir = os.path.join(self.bookstore_dir, book_folder_name)
+            chapters_dir = os.path.join(book_txt_dir, "Chapters")
+            
+            # 创建必需的目录
+            os.makedirs(book_txt_dir, exist_ok=True)
+            os.makedirs(book_json_dir, exist_ok=True) 
+            os.makedirs(chapters_dir, exist_ok=True)
+            
+            self.log_callback(f'创建文件夹: {book_folder_name}')
+
             # 使用原始章节列表的顺序
             chapter_list = list(chapters.items())  # 转换为列表保持顺序
             total_chapters = len(chapter_list)
@@ -164,7 +177,16 @@ class NovelDownloader:
                         try:
                             content = future.result()
                             if content:
-                                novel_content[title.strip()] = content  # 保存时去除标题的空白字符
+                                clean_title = title.strip()
+                                novel_content[clean_title] = content  # 保存时去除标题的空白字符
+                                
+                                # 额外保存单独的章节TXT文件到Chapters文件夹
+                                chapter_filename = f"{self._sanitize_filename(clean_title)}.txt"
+                                chapter_path = os.path.join(chapters_dir, chapter_filename)
+                                
+                                with open(chapter_path, 'w', encoding='UTF-8') as f:
+                                    f.write(f"{clean_title}\n\n{content}")
+                                    
                         except Exception as e:
                             self.log_callback(f'下载章节失败 {title}: {str(e)}')
 
@@ -177,16 +199,16 @@ class NovelDownloader:
                             title
                         )
 
-            # 保存到JSON文件（备份）
-            json_path = os.path.join(self.bookstore_dir, f'{safe_name}.json')
+            # 保存到JSON文件（备份）到新的文件夹结构
+            json_path = os.path.join(book_json_dir, f'{safe_name}.json')
             with open(json_path, 'w', encoding='UTF-8') as f:
                 json.dump(novel_content, f, ensure_ascii=False, indent=4)
 
-            # 根据配置保存模式生成相应的文件
+            # 根据配置保存模式生成相应的文件到新的文件夹结构
             if self.config.save_mode == SaveMode.SINGLE_TXT:
-                result = self._save_single_txt(safe_name, novel_content)
+                result = self._save_single_txt_to_folder(safe_name, novel_content, book_txt_dir)
             elif self.config.save_mode == SaveMode.SPLIT_TXT:
-                result = self._save_split_txt(safe_name, novel_content)
+                result = self._save_split_txt_to_folder(safe_name, novel_content, book_txt_dir)
             elif self.config.save_mode == SaveMode.EPUB:
                 result = self._download_epub(novel_id)
             elif self.config.save_mode == SaveMode.HTML:
@@ -194,7 +216,7 @@ class NovelDownloader:
             elif self.config.save_mode == SaveMode.LATEX:
                 result = self._download_latex(novel_id)
             else:
-                result = self._save_single_txt(safe_name, novel_content)  # 默认TXT模式
+                result = self._save_single_txt_to_folder(safe_name, novel_content, book_txt_dir)  # 默认TXT模式
 
             return result
 
@@ -541,6 +563,52 @@ class NovelDownloader:
                     f.write(f'{modified_content}\n')
         
         return 's'  # 返回成功标识
+
+    def _save_single_txt_to_folder(self, name: str, content: dict, output_dir: str) -> str:
+        """Save all chapters to a single TXT file in specified folder"""
+        output_path = os.path.join(output_dir, f'{name}.txt')
+        fg = '\n' + self.config.kgf * self.config.kg
+
+        with open(output_path, 'w', encoding='UTF-8') as f:
+            for title, chapter_content in content.items():
+                # 跳过元数据项
+                if title.startswith('_'):
+                    continue
+                    
+                f.write(f'\n{title}{fg}')
+                if self.config.kg == 0:
+                    f.write(f'{chapter_content}\n')
+                else:
+                    # 将替换结果存储在一个变量中
+                    modified_content = chapter_content.replace("\n", fg)
+                    # 在 f-string 中使用这个变量
+                    f.write(f'{modified_content}\n')
+        
+        return 's'  # 返回成功标识
+
+    def _save_split_txt_to_folder(self, name: str, content: Dict, output_dir: str) -> str:
+        """Save each chapter to a separate TXT file in specified folder"""
+        chapter_output_dir = os.path.join(output_dir, name)
+        os.makedirs(chapter_output_dir, exist_ok=True)
+
+        for title, chapter_content in content.items():
+            # 跳过元数据项
+            if title.startswith('_'):
+                continue
+                
+            chapter_path = os.path.join(
+                chapter_output_dir,
+                f'{self._sanitize_filename(title)}.txt'
+            )
+            if self.config.kg == 0:
+                replacement_content = chapter_content
+            else:
+                replacement_content = chapter_content.replace("\n", self.config.kgf * self.config.kg)
+
+            with open(chapter_path, 'w', encoding='UTF-8') as f:
+                f.write(f'{replacement_content}\n')
+
+        return 's'
 
     def _save_split_txt(self, name: str, content: Dict) -> str:
         """Save each chapter to a separate TXT file"""
