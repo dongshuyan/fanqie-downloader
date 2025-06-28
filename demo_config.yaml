@@ -1,0 +1,53 @@
+# 演示配置文件 - 启用多种输出格式
+# 这个配置文件展示了如何同时启用多种格式
+
+# ================== 文件格式控制 ==================
+formats:
+  # 启用TXT文件
+  enable_txt: true
+  
+  # 启用JSON备份文件  
+  enable_json: true
+  
+  # 启用EPUB电子书
+  enable_epub: true
+  
+  # 暂时关闭HTML和LaTeX
+  enable_html: false
+  enable_latex: false
+
+# ================== 目录配置 ==================
+directories:
+  # 所有文件保存到demo_downloads目录下
+  txt_download_dir: "demo_downloads/txt"
+  json_backup_dir: "demo_downloads/json"
+  epub_dir: "demo_downloads/epub"
+
+# ================== 下载性能配置 ==================
+performance:
+  # 使用较少线程数进行演示
+  thread_count: 4
+  
+  # 使用快速模式（演示用）
+  delay_mode: "fast"
+
+# ================== 文件管理配置 ==================
+file_management:
+  # 合成TXT后删除章节文件夹（演示清理功能）
+  delete_chapters_after_merge: true
+  
+  # 遇到冲突时重命名
+  conflict_resolution: "rename"
+
+# ================== Cookie和认证配置 ==================
+authentication:
+  # 自动生成Cookie
+  cookie_mode: "auto"
+  
+  # 跳过Cookie验证（加快启动速度）
+  validate_cookie: false
+
+# ================== 日志配置 ==================
+logging:
+  # 详细输出模式（方便调试）
+  level: "verbose" 

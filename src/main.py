@@ -10,6 +10,7 @@ from ebooklib import epub
 from tqdm import tqdm
 from bs4 import BeautifulSoup
 import json
+import yaml  # 添加YAML支持
 import time
 import random
 import re  # 添加正则表达式模块
@@ -18,7 +19,7 @@ import platform
 import shutil
 import concurrent.futures
 from typing import Callable, Optional, Dict, List, Union
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 
@@ -32,17 +33,174 @@ class SaveMode(Enum):
 
 @dataclass
 class Config:
+    # 文件格式控制
+    enable_txt: bool = True
+    enable_json: bool = True  
+    enable_epub: bool = False
+    enable_html: bool = False
+    enable_latex: bool = False
+    
+    # 目录配置
+    txt_download_dir: str = "novel_downloads"
+    json_backup_dir: str = "bookstore"
+    epub_dir: str = "epub_downloads"
+    html_dir: str = "html_downloads"
+    latex_dir: str = "latex_downloads"
+    
+    # 性能配置
+    thread_count: int = 8
+    delay_mode: str = "normal"
+    custom_delay: List[int] = field(default_factory=lambda: [150, 300])
+    
+    # 文件管理
+    delete_chapters_after_merge: bool = False
+    conflict_resolution: str = "rename"
+    encoding: str = "UTF-8"
+    preserve_original_order: bool = False
+    
+    # Cookie配置
+    cookie_mode: str = "auto"
+    manual_cookie: str = ""
+    cookie_file: str = "data/cookie.json"
+    validate_cookie: bool = False
+    
+    # 内容处理
+    paragraph_spacing: int = 0
+    indent_character: str = "　"
+    decode_mode: str = "auto"
+    filter_special_chars: bool = False
+    
+    # 网络配置
+    timeout: int = 30
+    retry_count: int = 3
+    rotate_user_agent: bool = True
+    
+    # 日志配置
+    log_level: str = "normal"
+    save_log_to_file: bool = False
+    log_file: str = "logs/download.log"
+    
+    # 高级选项
+    enable_experimental: bool = False
+    memory_mode: str = "normal"
+    show_progress_bar: bool = True
+    
+    # 兼容性字段（保持向后兼容）
     kg: int = 0
     kgf: str = '　'
-    delay: List[int] = None
+    delay: List[int] = field(default_factory=lambda: [100, 200])
     save_path: str = ''
     save_mode: SaveMode = SaveMode.SINGLE_TXT
     space_mode: str = 'halfwidth'
-    xc: int = 8  # 修改并行度为8
-
+    xc: int = 8
+    
     def __post_init__(self):
-        if self.delay is None:
-            self.delay = [50, 150]
+        # 处理延时配置
+        if self.delay_mode == "fast":
+            self.delay = [50, 100]
+        elif self.delay_mode == "normal":
+            self.delay = [100, 200]
+        elif self.delay_mode == "safe":
+            self.delay = [200, 500]
+        elif self.delay_mode == "custom":
+            self.delay = self.custom_delay.copy()
+        
+        # 同步线程数配置
+        self.xc = self.thread_count
+        
+        # 同步段落配置
+        self.kg = self.paragraph_spacing
+        self.kgf = self.indent_character
+    
+    @classmethod
+    def from_yaml(cls, yaml_path: str) -> 'Config':
+        """从YAML文件加载配置"""
+        try:
+            with open(yaml_path, 'r', encoding='utf-8') as f:
+                data = yaml.safe_load(f)
+            
+            config = cls()
+            
+            # 文件格式配置
+            if 'formats' in data:
+                formats = data['formats']
+                config.enable_txt = formats.get('enable_txt', True)
+                config.enable_json = formats.get('enable_json', True)
+                config.enable_epub = formats.get('enable_epub', False)
+                config.enable_html = formats.get('enable_html', False)
+                config.enable_latex = formats.get('enable_latex', False)
+            
+            # 目录配置
+            if 'directories' in data:
+                dirs = data['directories']
+                config.txt_download_dir = dirs.get('txt_download_dir', "novel_downloads")
+                config.json_backup_dir = dirs.get('json_backup_dir', "bookstore")
+                config.epub_dir = dirs.get('epub_dir', "epub_downloads")
+                config.html_dir = dirs.get('html_dir', "html_downloads")
+                config.latex_dir = dirs.get('latex_dir', "latex_downloads")
+            
+            # 性能配置
+            if 'performance' in data:
+                perf = data['performance']
+                config.thread_count = perf.get('thread_count', 8)
+                config.delay_mode = perf.get('delay_mode', "normal")
+                config.custom_delay = perf.get('custom_delay', [150, 300])
+            
+            # 文件管理配置
+            if 'file_management' in data:
+                fm = data['file_management']
+                config.delete_chapters_after_merge = fm.get('delete_chapters_after_merge', False)
+                config.conflict_resolution = fm.get('conflict_resolution', "rename")
+                config.encoding = fm.get('encoding', "UTF-8")
+                config.preserve_original_order = fm.get('preserve_original_order', False)
+            
+            # Cookie配置
+            if 'authentication' in data:
+                auth = data['authentication']
+                config.cookie_mode = auth.get('cookie_mode', "auto")
+                config.manual_cookie = auth.get('manual_cookie', "")
+                config.cookie_file = auth.get('cookie_file', "data/cookie.json")
+                config.validate_cookie = auth.get('validate_cookie', False)
+            
+            # 内容处理配置
+            if 'content' in data:
+                content = data['content']
+                config.paragraph_spacing = content.get('paragraph_spacing', 0)
+                config.indent_character = content.get('indent_character', "　")
+                config.decode_mode = content.get('decode_mode', "auto")
+                config.filter_special_chars = content.get('filter_special_chars', False)
+            
+            # 网络配置
+            if 'network' in data:
+                net = data['network']
+                config.timeout = net.get('timeout', 30)
+                config.retry_count = net.get('retry_count', 3)
+                config.rotate_user_agent = net.get('rotate_user_agent', True)
+            
+            # 日志配置
+            if 'logging' in data:
+                log = data['logging']
+                config.log_level = log.get('level', "normal")
+                config.save_log_to_file = log.get('save_to_file', False)
+                config.log_file = log.get('log_file', "logs/download.log")
+            
+            # 高级配置
+            if 'advanced' in data:
+                adv = data['advanced']
+                config.enable_experimental = adv.get('enable_experimental', False)
+                config.memory_mode = adv.get('memory_mode', "normal")
+                config.show_progress_bar = adv.get('show_progress_bar', True)
+            
+            return config
+            
+        except Exception as e:
+            print(f"⚠️ 配置文件读取失败: {e}")
+            print("使用默认配置")
+            return cls()
+    
+    def get_delay_range(self) -> List[int]:
+        """获取当前的延时范围"""
+        return self.delay
 
 
 class NovelDownloader:
@@ -67,11 +225,22 @@ class NovelDownloader:
         # Use absolute paths based on script location
         self.script_dir = os.path.dirname(os.path.abspath(__file__))
         self.data_dir = os.path.join(self.script_dir, 'data')
-        self.bookstore_dir = os.path.join(self.script_dir, 'bookstore')  # 修改：JSON文件直接放在src/bookstore
-        self.novel_downloads_dir = os.path.join(self.script_dir, 'novel_downloads')  # 新增：TXT文件放在src/novel_downloads
+        
+        # 使用配置文件中的目录设置
+        self.novel_downloads_dir = os.path.join(self.script_dir, self.config.txt_download_dir)
+        self.bookstore_dir = os.path.join(self.script_dir, self.config.json_backup_dir)
+        self.epub_dir = os.path.join(self.script_dir, self.config.epub_dir)
+        self.html_dir = os.path.join(self.script_dir, self.config.html_dir)
+        self.latex_dir = os.path.join(self.script_dir, self.config.latex_dir)
+        
         self.record_path = os.path.join(self.data_dir, 'record.json')
         self.config_path = os.path.join(self.data_dir, 'config.json')
-        self.cookie_path = os.path.join(self.data_dir, 'cookie.json')
+        
+        # Cookie路径根据配置决定
+        if self.config.cookie_mode == "file":
+            self.cookie_path = os.path.join(self.script_dir, self.config.cookie_file)
+        else:
+            self.cookie_path = os.path.join(self.data_dir, 'cookie.json')
 
         self.CODE = [[58344, 58715], [58345, 58716]]
 
@@ -93,8 +262,28 @@ class NovelDownloader:
     def _setup_directories(self):
         """Create necessary directories if they don't exist"""
         os.makedirs(self.data_dir, exist_ok=True)
-        os.makedirs(self.bookstore_dir, exist_ok=True)
-        os.makedirs(self.novel_downloads_dir, exist_ok=True)  # 创建TXT文件目录
+        
+        # 根据配置创建相应的目录
+        if self.config.enable_txt:
+            os.makedirs(self.novel_downloads_dir, exist_ok=True)
+        
+        if self.config.enable_json:
+            os.makedirs(self.bookstore_dir, exist_ok=True)
+            
+        if self.config.enable_epub:
+            os.makedirs(self.epub_dir, exist_ok=True)
+            
+        if self.config.enable_html:
+            os.makedirs(self.html_dir, exist_ok=True)
+            
+        if self.config.enable_latex:
+            os.makedirs(self.latex_dir, exist_ok=True)
+            
+        # 如果需要保存日志，创建日志目录
+        if self.config.save_log_to_file:
+            log_dir = os.path.dirname(os.path.join(self.script_dir, self.config.log_file))
+            if log_dir:
+                os.makedirs(log_dir, exist_ok=True)
 
     def _init_cookie(self):
         """Initialize cookie for downloads - 简化版本，直接使用默认cookie"""
@@ -200,26 +389,70 @@ class NovelDownloader:
                             title
                         )
 
-            # 保存到JSON文件（备份）到新的文件夹结构
-            json_path = os.path.join(book_json_dir, f'{safe_name}.json')
-            with open(json_path, 'w', encoding='UTF-8') as f:
-                json.dump(novel_content, f, ensure_ascii=False, indent=4)
-
-            # 根据配置保存模式生成相应的文件到新的文件夹结构
-            if self.config.save_mode == SaveMode.SINGLE_TXT:
+            # 根据配置决定保存哪些格式
+            results = []
+            
+            # 保存JSON文件（如果启用）
+            if self.config.enable_json:
+                json_path = os.path.join(book_json_dir, f'{safe_name}.json')
+                with open(json_path, 'w', encoding='UTF-8') as f:
+                    json.dump(novel_content, f, ensure_ascii=False, indent=4)
+                self.log_callback(f'✅ JSON文件已保存: {json_path}')
+                results.append('json')
+            
+            # 保存TXT文件（如果启用）
+            if self.config.enable_txt:
                 result = self._save_single_txt_to_folder(safe_name, novel_content, book_txt_dir)
-            elif self.config.save_mode == SaveMode.SPLIT_TXT:
-                result = self._save_split_txt_to_folder(safe_name, novel_content, book_txt_dir)
-            elif self.config.save_mode == SaveMode.EPUB:
-                result = self._download_epub(novel_id)
-            elif self.config.save_mode == SaveMode.HTML:
-                result = self._download_html(novel_id)
-            elif self.config.save_mode == SaveMode.LATEX:
-                result = self._download_latex(novel_id)
+                if result == 's':
+                    self.log_callback(f'✅ TXT文件已保存')
+                    results.append('txt')
+                    
+                    # 如果配置要求删除章节文件夹
+                    if self.config.delete_chapters_after_merge:
+                        try:
+                            import shutil
+                            shutil.rmtree(chapters_dir)
+                            self.log_callback(f'🗑️ 已删除章节文件夹: {chapters_dir}')
+                        except Exception as e:
+                            self.log_callback(f'⚠️ 删除章节文件夹失败: {e}')
+            
+            # 保存EPUB文件（如果启用）
+            if self.config.enable_epub:
+                try:
+                    epub_result = self._download_epub(novel_id)
+                    if epub_result == 's':
+                        self.log_callback(f'✅ EPUB文件已保存')
+                        results.append('epub')
+                except Exception as e:
+                    self.log_callback(f'⚠️ EPUB保存失败: {e}')
+            
+            # 保存HTML文件（如果启用）
+            if self.config.enable_html:
+                try:
+                    html_result = self._download_html(novel_id)
+                    if html_result == 's':
+                        self.log_callback(f'✅ HTML文件已保存')
+                        results.append('html')
+                except Exception as e:
+                    self.log_callback(f'⚠️ HTML保存失败: {e}')
+            
+            # 保存LaTeX文件（如果启用）
+            if self.config.enable_latex:
+                try:
+                    latex_result = self._download_latex(novel_id)
+                    if latex_result == 's':
+                        self.log_callback(f'✅ LaTeX文件已保存')
+                        results.append('latex')
+                except Exception as e:
+                    self.log_callback(f'⚠️ LaTeX保存失败: {e}')
+            
+            # 返回结果
+            if results:
+                self.log_callback(f'🎉 下载完成！已保存格式: {", ".join(results)}')
+                return 's'
             else:
-                result = self._save_single_txt_to_folder(safe_name, novel_content, book_txt_dir)  # 默认TXT模式
-
-            return result
+                self.log_callback(f'⚠️ 未启用任何输出格式')
+                return 'err'
 
         except Exception as e:
             self.log_callback(f'下载失败: {str(e)}')
@@ -1284,8 +1517,42 @@ class NovelDownloader:
 def create_cli():
     """Create CLI interface using the NovelDownloader class"""
     print('本程序完全免费(此版本为WEB版，目前处于测试阶段)\nGithub: https://github.com/ying-ck/fanqienovel-downloader\n作者：Yck & qxqycb & lingo34')
+    print('优化增强版 - 支持YAML配置文件')
 
-    config = Config()
+    # 检查命令行参数
+    import sys
+    config_path = 'config.yaml'
+    
+    if len(sys.argv) > 1:
+        if sys.argv[1] in ['-h', '--help']:
+            print('\n使用方法:')
+            print('  python src/main.py                    # 使用默认配置文件 config.yaml')
+            print('  python src/main.py [配置文件路径]      # 使用指定配置文件')
+            print('  python src/main.py --help            # 显示此帮助信息')
+            print('\n配置文件示例请参考 config.yaml')
+            return
+        else:
+            config_path = sys.argv[1]
+    
+    # 加载配置
+    if os.path.exists(config_path):
+        print(f'📄 加载配置文件: {config_path}')
+        config = Config.from_yaml(config_path)
+    else:
+        if config_path != 'config.yaml':
+            print(f'⚠️ 配置文件不存在: {config_path}')
+        print('📄 使用默认配置')
+        config = Config()
+    
+    # 显示当前配置摘要
+    print(f'\n📋 当前配置摘要:')
+    print(f'  🗂️  输出格式: TXT({config.enable_txt}) JSON({config.enable_json}) EPUB({config.enable_epub}) HTML({config.enable_html}) LaTeX({config.enable_latex})')
+    print(f'  ⚡ 线程数: {config.thread_count}')
+    print(f'  ⏱️  延时模式: {config.delay_mode} ({config.delay[0]}-{config.delay[1]}ms)')
+    print(f'  📁 TXT目录: {config.txt_download_dir}')
+    if config.enable_json:
+        print(f'  📁 JSON目录: {config.json_backup_dir}')
+    
     downloader = NovelDownloader(config)
 
     # Check for backup

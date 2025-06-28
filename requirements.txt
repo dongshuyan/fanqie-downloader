@@ -8,4 +8,5 @@ Flask-SocketIO
 gevent
 gevent-websocket
 beautifulsoup4
+PyYAML
 

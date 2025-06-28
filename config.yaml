@@ -1,0 +1,143 @@
+# 番茄小说下载器配置文件
+# 本配置文件可以控制下载器的各种行为
+
+# ================== 文件格式控制 ==================
+formats:
+  # 是否下载TXT文件 (默认: true)
+  enable_txt: true
+  
+  # 是否下载JSON备份文件 (默认: true)  
+  enable_json: true
+  
+  # 是否下载EPUB电子书 (默认: false)
+  enable_epub: false
+  
+  # 是否下载HTML网页格式 (默认: false)
+  enable_html: false
+  
+  # 是否下载LaTeX文档格式 (默认: false)
+  enable_latex: false
+
+# ================== 目录配置 ==================
+directories:
+  # 小说TXT文件存储目录 (相对于src目录)
+  txt_download_dir: "novel_downloads"
+  
+  # JSON备份文件存储目录 (相对于src目录)
+  json_backup_dir: "bookstore"
+  
+  # EPUB文件存储目录 (相对于src目录)
+  epub_dir: "epub_downloads"
+  
+  # HTML文件存储目录 (相对于src目录)
+  html_dir: "html_downloads"
+  
+  # LaTeX文件存储目录 (相对于src目录)
+  latex_dir: "latex_downloads"
+
+# ================== 下载性能配置 ==================
+performance:
+  # 并行下载线程数量 (建议: 1-16, 默认: 8)
+  thread_count: 8
+  
+  # 并发延时时间范围 (毫秒) - 避免被服务器监控
+  # 可选预设: 
+  # "fast": [50, 100]      - 快速模式 (可能被检测)
+  # "normal": [100, 200]   - 正常模式 (推荐)
+  # "safe": [200, 500]     - 安全模式 (较慢但稳定)
+  # "custom": [min, max]   - 自定义范围
+  delay_mode: "normal"
+  
+  # 自定义延时范围 (仅当delay_mode为"custom"时生效)
+  custom_delay: [150, 300]
+
+# ================== 文件管理配置 ==================
+file_management:
+  # 合成TXT文件后是否删除章节文件夹 (默认: false)
+  delete_chapters_after_merge: false
+  
+  # 文件名冲突处理方式
+  # "overwrite": 覆盖已存在文件
+  # "skip": 跳过已存在文件
+  # "rename": 自动重命名 (添加数字后缀)
+  conflict_resolution: "rename"
+  
+  # 章节文件编码格式 (默认: UTF-8)
+  encoding: "UTF-8"
+  
+  # 是否保留原始章节顺序 (true) 还是智能排序 (false)
+  preserve_original_order: false
+
+# ================== Cookie和认证配置 ==================
+authentication:
+  # Cookie获取模式
+  # "auto": 自动生成 (推荐)
+  # "manual": 手动指定
+  # "file": 从文件读取
+  cookie_mode: "auto"
+  
+  # 手动指定的Cookie (仅当cookie_mode为"manual"时生效)
+  manual_cookie: ""
+  
+  # Cookie文件路径 (仅当cookie_mode为"file"时生效)
+  cookie_file: "data/cookie.json"
+  
+  # Cookie有效性检查 (默认: false, 设为true会增加启动时间)
+  validate_cookie: false
+
+# ================== 内容处理配置 ==================
+content:
+  # 段落间距设置 (默认: 0)
+  paragraph_spacing: 0
+  
+  # 段落缩进字符 (默认: 全角空格)
+  indent_character: "　"
+  
+  # 字符解码模式
+  # 0: 标准模式
+  # 1: 备用模式  
+  # "auto": 自动检测
+  decode_mode: "auto"
+  
+  # 是否过滤特殊字符 (默认: false)
+  filter_special_chars: false
+
+# ================== 网络配置 ==================
+network:
+  # 请求超时时间 (秒)
+  timeout: 30
+  
+  # 重试次数
+  retry_count: 3
+  
+  # 用户代理轮换 (默认: true)
+  rotate_user_agent: true
+
+# ================== 日志配置 ==================
+logging:
+  # 日志详细程度
+  # "minimal": 最少输出
+  # "normal": 正常输出 (推荐)
+  # "verbose": 详细输出
+  # "debug": 调试输出
+  level: "normal"
+  
+  # 是否保存日志到文件 (默认: false)
+  save_to_file: false
+  
+  # 日志文件路径 (仅当save_to_file为true时生效)
+  log_file: "logs/download.log"
+
+# ================== 高级选项 ==================
+advanced:
+  # 是否启用实验性功能 (默认: false)
+  enable_experimental: false
+  
+  # 内存使用优化 (对大文件有效)
+  # "normal": 正常模式
+  # "low": 低内存模式
+  # "high": 高性能模式
+  memory_mode: "normal"
+  
+  # 是否显示下载进度条 (默认: true)
+  show_progress_bar: true 
