@@ -14,6 +14,10 @@ formats:
   
   # 是否下载LaTeX文档格式 (默认: false)
   enable_latex: true
+  
+  # 是否生成PDF文件 (默认: false)
+  # 注意：需要本地安装pdflatex才能使用此功能
+  enable_pdf: false
 
 # ================== 目录配置 ==================
 directories:

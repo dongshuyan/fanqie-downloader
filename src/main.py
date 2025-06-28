@@ -38,6 +38,7 @@ class Config:
     enable_epub: bool = False
     enable_html: bool = False
     enable_latex: bool = False
+    enable_pdf: bool = False
     
     # 目录配置 (简化版)
     bookstore_dir: str = "bookstore"    # JSON文件存放目录
@@ -124,6 +125,7 @@ class Config:
                 config.enable_epub = formats.get('enable_epub', False)
                 config.enable_html = formats.get('enable_html', False)
                 config.enable_latex = formats.get('enable_latex', False)
+                config.enable_pdf = formats.get('enable_pdf', False)
             
             # 目录配置 (简化版)
             if 'directories' in data:
@@ -395,7 +397,7 @@ class NovelDownloader:
             # 保存EPUB文件（如果启用）
             if self.config.enable_epub:
                 try:
-                    epub_result = self._download_epub(novel_id)
+                    epub_result = self._save_epub_from_content(safe_name, novel_content, book_download_dir, novel_id)
                     if epub_result == 's':
                         self.log_callback(f'✅ EPUB文件已保存')
                         results.append('epub')
@@ -405,7 +407,7 @@ class NovelDownloader:
             # 保存HTML文件（如果启用）
             if self.config.enable_html:
                 try:
-                    html_result = self._download_html(novel_id)
+                    html_result = self._save_html_from_content(safe_name, novel_content, book_download_dir)
                     if html_result == 's':
                         self.log_callback(f'✅ HTML文件已保存')
                         results.append('html')
@@ -415,12 +417,40 @@ class NovelDownloader:
             # 保存LaTeX文件（如果启用）
             if self.config.enable_latex:
                 try:
-                    latex_result = self._download_latex(novel_id)
+                    latex_result = self._save_latex_from_content(safe_name, novel_content, book_download_dir)
                     if latex_result == 's':
                         self.log_callback(f'✅ LaTeX文件已保存')
                         results.append('latex')
+                        
+                        # 如果也启用了PDF，从LaTeX生成PDF
+                        if self.config.enable_pdf:
+                            try:
+                                pdf_result = self._generate_pdf_from_latex(safe_name, book_download_dir)
+                                if pdf_result == 's':
+                                    self.log_callback(f'✅ PDF文件已保存')
+                                    results.append('pdf')
+                            except Exception as e:
+                                self.log_callback(f'⚠️ PDF生成失败: {e}')
                 except Exception as e:
                     self.log_callback(f'⚠️ LaTeX保存失败: {e}')
+            elif self.config.enable_pdf:
+                # 如果只启用了PDF而没有启用LaTeX，先生成LaTeX再转PDF
+                try:
+                    latex_result = self._save_latex_from_content(safe_name, novel_content, book_download_dir)
+                    if latex_result == 's':
+                        pdf_result = self._generate_pdf_from_latex(safe_name, book_download_dir)
+                        if pdf_result == 's':
+                            self.log_callback(f'✅ PDF文件已保存')
+                            results.append('pdf')
+                            # 删除临时LaTeX文件
+                            try:
+                                latex_path = os.path.join(book_download_dir, f'{safe_name}.tex')
+                                if os.path.exists(latex_path):
+                                    os.remove(latex_path)
+                            except:
+                                pass
+                except Exception as e:
+                    self.log_callback(f'⚠️ PDF生成失败: {e}')
             
             # 返回结果
             if results:
@@ -1489,6 +1519,233 @@ class NovelDownloader:
         with open(self.book_json_path, 'w', encoding='UTF-8') as f:
             json.dump(self.zj, f, ensure_ascii=False)
 
+    def _save_epub_from_content(self, safe_name: str, novel_content: dict, output_dir: str, novel_id: int) -> str:
+        """基于已下载内容生成EPUB文件，保存到指定目录"""
+        try:
+            # 获取小说信息
+            book = epub.EpubBook()
+            book.set_identifier(str(novel_id))
+            book.set_title(safe_name)
+            book.set_language('zh')
+            
+            # 尝试获取作者信息
+            try:
+                author = self._get_author_info(novel_id)
+                if author:
+                    book.add_author(author)
+                else:
+                    book.add_author('未知作者')
+            except:
+                book.add_author('未知作者')
+            
+            # 添加封面（如果可以获取）
+            try:
+                cover_url = self._get_cover_url(novel_id)
+                if cover_url:
+                    self._add_cover_to_epub(book, cover_url)
+            except:
+                pass  # 封面获取失败不影响主要流程
+            
+            # 为每个章节创建EPUB章节
+            for i, (title, content) in enumerate(novel_content.items()):
+                if title.startswith('_'):  # 跳过元数据
+                    continue
+                    
+                chapter = epub.EpubHtml(
+                    title=title,
+                    file_name=f'chapter_{i+1}.xhtml',
+                    lang='zh'
+                )
+                
+                # 格式化内容
+                formatted_content = ''.join(f'<p>{para.strip()}</p>' for para in content.split('\n') if para.strip())
+                chapter.content = f'<h1>{title}</h1>{formatted_content}'
+                
+                book.add_item(chapter)
+            
+            # 添加导航
+            chapters = [item for item in book.get_items() if isinstance(item, epub.EpubHtml)]
+            book.toc = chapters
+            book.spine = ['nav'] + chapters
+            book.add_item(epub.EpubNcx())
+            book.add_item(epub.EpubNav())
+            
+            # 保存EPUB文件到指定目录
+            epub_path = os.path.join(output_dir, f'{safe_name}.epub')
+            epub.write_epub(epub_path, book)
+            
+            return 's'
+            
+        except Exception as e:
+            self.log_callback(f'EPUB生成失败: {str(e)}')
+            return 'err'
+    
+    def _save_html_from_content(self, safe_name: str, novel_content: dict, output_dir: str) -> str:
+        """基于已下载内容生成HTML文件，保存到指定目录"""
+        try:
+            html_dir = os.path.join(output_dir, f"{safe_name}(html)")
+            os.makedirs(html_dir, exist_ok=True)
+            
+            # 生成章节文件
+            all_titles = []
+            for i, (title, content) in enumerate(novel_content.items()):
+                if title.startswith('_'):  # 跳过元数据
+                    continue
+                    
+                all_titles.append(title)
+                filename = f"chapter_{i+1}.html"
+                chapter_path = os.path.join(html_dir, filename)
+                
+                # 创建HTML内容
+                html_content = f"""<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title}</title>
+    <style>
+        body {{ font-family: serif; line-height: 1.8; margin: 40px; background: #f9f9f9; }}
+        .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        h1 {{ color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }}
+        p {{ text-indent: 2em; margin: 1em 0; }}
+        .navigation {{ margin: 20px 0; text-align: center; }}
+        .navigation a {{ margin: 0 10px; padding: 8px 16px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }}
+        .navigation a:hover {{ background: #0056b3; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="navigation">
+            <a href="index.html">目录</a>
+        </div>
+        <h1>{title}</h1>
+"""
+                
+                # 添加章节内容
+                for paragraph in content.split('\n'):
+                    if paragraph.strip():
+                        html_content += f"        <p>{paragraph.strip()}</p>\n"
+                
+                html_content += """    </div>
+</body>
+</html>"""
+                
+                with open(chapter_path, 'w', encoding='UTF-8') as f:
+                    f.write(html_content)
+            
+            # 生成目录文件
+            index_content = self._create_html_index(safe_name, novel_content)
+            index_path = os.path.join(html_dir, 'index.html')
+            with open(index_path, 'w', encoding='UTF-8') as f:
+                f.write(index_content)
+            
+            return 's'
+            
+        except Exception as e:
+            self.log_callback(f'HTML生成失败: {str(e)}')
+            return 'err'
+    
+    def _save_latex_from_content(self, safe_name: str, novel_content: dict, output_dir: str) -> str:
+        """基于已下载内容生成LaTeX文件，保存到指定目录"""
+        try:
+            latex_path = os.path.join(output_dir, f'{safe_name}.tex')
+            
+            with open(latex_path, 'w', encoding='UTF-8') as f:
+                # LaTeX文档头部
+                f.write(self._create_latex_header(safe_name))
+                
+                # 添加章节内容
+                for title, content in novel_content.items():
+                    if title.startswith('_'):  # 跳过元数据
+                        continue
+                        
+                    formatted_chapter = self._format_latex_chapter(title, content)
+                    f.write(formatted_chapter)
+                
+                # LaTeX文档尾部
+                f.write('\n\\end{document}\n')
+            
+            return 's'
+            
+        except Exception as e:
+            self.log_callback(f'LaTeX生成失败: {str(e)}')
+            return 'err'
+    
+    def _generate_pdf_from_latex(self, safe_name: str, output_dir: str) -> str:
+        """使用pdflatex将LaTeX文件编译为PDF"""
+        try:
+            import subprocess
+            
+            latex_file = f'{safe_name}.tex'
+            latex_path = os.path.join(output_dir, latex_file)
+            
+            # 检查LaTeX文件是否存在
+            if not os.path.exists(latex_path):
+                raise Exception(f'LaTeX文件不存在: {latex_path}')
+            
+            # 检查pdflatex是否可用
+            try:
+                subprocess.run(['pdflatex', '--version'], capture_output=True, check=True)
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                raise Exception('pdflatex未安装或不在PATH中。请安装LaTeX发行版（如TeX Live或MiKTeX）')
+            
+            # 编译LaTeX为PDF
+            self.log_callback('正在使用pdflatex编译PDF...')
+            
+            # 切换到输出目录执行pdflatex
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(output_dir)
+                
+                # 运行pdflatex，通常需要运行两次以正确生成目录和引用
+                for i in range(2):
+                    result = subprocess.run(
+                        ['pdflatex', '-interaction=nonstopmode', latex_file],
+                        capture_output=True,
+                        text=True,
+                        timeout=300  # 5分钟超时
+                    )
+                    
+                    if result.returncode != 0:
+                        # 如果失败，尝试查看日志
+                        log_file = f'{safe_name}.log'
+                        error_info = f'pdflatex编译失败 (返回码: {result.returncode})'
+                        if os.path.exists(log_file):
+                            # 读取最后几行日志
+                            try:
+                                with open(log_file, 'r', encoding='utf-8', errors='ignore') as log_f:
+                                    lines = log_f.readlines()
+                                    # 取最后20行
+                                    error_lines = lines[-20:] if len(lines) > 20 else lines
+                                    error_info += '\n最后几行日志:\n' + ''.join(error_lines)
+                            except:
+                                pass
+                        raise Exception(error_info)
+                
+                # 检查PDF是否生成成功
+                pdf_file = f'{safe_name}.pdf'
+                if not os.path.exists(pdf_file):
+                    raise Exception('PDF文件未生成')
+                
+                # 清理辅助文件
+                aux_extensions = ['.aux', '.log', '.out', '.toc', '.fls', '.fdb_latexmk']
+                for ext in aux_extensions:
+                    aux_file = f'{safe_name}{ext}'
+                    if os.path.exists(aux_file):
+                        try:
+                            os.remove(aux_file)
+                        except:
+                            pass  # 清理失败不影响主要流程
+                
+                return 's'
+                
+            finally:
+                os.chdir(original_cwd)
+            
+        except Exception as e:
+            self.log_callback(f'PDF生成失败: {str(e)}')
+            return 'err'
+
 
 def create_cli():
     """Create CLI interface using the NovelDownloader class"""
@@ -1522,7 +1779,7 @@ def create_cli():
     
     # 显示当前配置摘要
     print(f'\n📋 当前配置摘要:')
-    print(f'  🗂️  输出格式: TXT({config.enable_txt}) JSON(必须) EPUB({config.enable_epub}) HTML({config.enable_html}) LaTeX({config.enable_latex})')
+    print(f'  🗂️  输出格式: TXT({config.enable_txt}) JSON(必须) EPUB({config.enable_epub}) HTML({config.enable_html}) LaTeX({config.enable_latex}) PDF({config.enable_pdf})')
     print(f'  ⚡ 线程数: {config.thread_count}')
     print(f'  ⏱️  延时模式: {config.delay_mode} ({config.delay[0]}-{config.delay[1]}ms)')
     print(f'  📁 JSON目录: {config.bookstore_dir}')

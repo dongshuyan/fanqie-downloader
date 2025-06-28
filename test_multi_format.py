@@ -44,6 +44,7 @@ def test_multi_format_download():
     print(f"  ✅ EPUB: {config.enable_epub}")
     print(f"  ✅ HTML: {config.enable_html}")
     print(f"  ✅ LaTeX: {config.enable_latex}")
+    print(f"  ✅ PDF: {config.enable_pdf}")
     print(f"  ⚡ 线程数: {config.thread_count}")
     print(f"  ⏱️  延时: {config.delay_mode} ({config.delay[0]}-{config.delay[1]}ms)")
     
@@ -73,7 +74,7 @@ def test_multi_format_download():
                 download_files = []
                 for root, dirs, files in os.walk(downloader.download_dir):
                     for file in files:
-                        if file.endswith(('.txt', '.epub', '.html', '.tex')):
+                        if file.endswith(('.txt', '.epub', '.html', '.tex', '.pdf')):
                             file_path = os.path.join(root, file)
                             file_size = os.path.getsize(file_path)
                             download_files.append((file_path, file_size))

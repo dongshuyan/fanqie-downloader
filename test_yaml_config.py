@@ -37,6 +37,7 @@ def test_yaml_config():
         print(f"  启用EPUB: {yaml_config.enable_epub}")
         print(f"  启用HTML: {yaml_config.enable_html}")
         print(f"  启用LaTeX: {yaml_config.enable_latex}")
+        print(f"  启用PDF: {yaml_config.enable_pdf}")
         print(f"  线程数: {yaml_config.thread_count}")
         print(f"  延时模式: {yaml_config.delay_mode}")
         print(f"  延时范围: {yaml_config.delay}")

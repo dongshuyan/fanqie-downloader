@@ -12,6 +12,9 @@ formats:
   # 启用HTML和LaTeX格式  
   enable_html: true
   enable_latex: true
+  
+  # 启用PDF生成（需要安装pdflatex）
+  enable_pdf: false
 
 # ================== 目录配置 ==================
 directories:
