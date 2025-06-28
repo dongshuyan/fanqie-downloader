@@ -1,149 +1,150 @@
-# Fanqienovel-downloader
+# 番茄小说下载器 - 优化增强版
 
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
+[![License](https://img.shields.io/badge/License-AGPL--3.0-green.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-Active-success.svg)]()
 
-### 由于上学的原因，作者无法及时回复，敬请谅解
-### fanqienovel downloader v1.1.5及以下版本，由于API失效无法使用，现在请使用最新版本（v1.1.6及以上）：
+> **基于 [ying-ck/fanqienovel-downloader](https://github.com/ying-ck/fanqienovel-downloader) 的优化增强版本**
 
-下载番茄小说，通过Python实现
-请勿滥用，且用且珍惜
+一个高效、稳定的番茄小说下载器，修复了原版的多个关键问题，提升了下载速度和文件质量。
 
-## 衍生工具
-1.[c.exe](https://github.com/ying-ck/fanqienovel-downloader/releases/tag/v1.1.13)用于检测番茄小说网页结构变化
+## ✨ 主要改进
 
-2.[s.exe](https://github.com/qxqycb/search-novel)用于小说内容搜索，可搭配番茄小说下载器使用
+### 🚀 性能优化
+- **Cookie获取加速**: 从原版的100次尝试优化到5次，大幅减少等待时间
+- **网络请求优化**: 减少不必要的验证步骤，提升下载速度
+- **智能重试机制**: 改进错误处理和重试逻辑
 
-3.[f.exe](https://github.com/qxqycb/novel-spilt)以文件大小来分割小说文件，可搭配番茄小说下载器使用
+### 🔧 Bug修复
+- **修复Cookie获取卡死问题**: 解决了原版在获取cookie时长时间卡住的问题
+- **修复DownloadProgress错误**: 解决了`name 'DownloadProgress' is not defined`错误
+- **修复TXT文件无法生成**: 确保每次下载都能正确生成TXT文件
+- **完善字符解码**: 正确应用charset.json，彻底解决乱码问题
 
-## 使用方法
+### 📁 新增功能
+- **精简测试工具**: 新增`test_download.py`用于快速测试下载功能
+- **自动化测试**: 新增`auto_test.py`用于验证程序功能
+- **增强文件管理**: 同时生成JSON备份和TXT阅读文件
 
-### 本地程序
+## 🎯 快速开始
 
-### v1.1.8版本及以上
+### 环境要求
+- Python 3.8+
+- 网络连接
 
-1. 输入小说目录页面完整链接或者id下载
-1. 输入id或链接直接下载
-2. 输入1以更新，读取 `record.json` 中的id进行更新
-3. 输入2进行搜索
-4. 输入3进行批量下载
-5. 输入4进入设置，可调整正文段首占位符，调整延时，小说存储位置，保存模式
-6. 输入5进行备份下载的小说以及下载格式、段首空格等
-7. 输入6退出程序
+### 安装依赖
+```bash
+pip install -r requirements.txt
+```
 
+### 运行程序
+```bash
+# 运行优化版本
+python src/main-fix.py
 
-### 目前(v1.1.14版本)保存方式支持：1.整本保存 2.分章保存 3.EPUB电子书格式保存 4.html格式保存 5.Latex格式保存
+# 或运行精简测试版本
+python test_download.py
+```
 
-### 请注意！修改了设置中的每一个选项都会覆盖原来的数据，请仔细查看后在做出选择。若想修复默认选项，请将`config.json`文件删除
+## 🛠️ 使用方法
 
-## fanqienovel downloader 在各个系统上的运行情况:
-| 系统(System) | 运行情况(Operation) |
-| ---------------- | ------------------------ |
-| windows 7 |可运行 |
-| windows 10 |可运行 |
-| windows 11|可运行 |
-| mac OS X 10.1 | 可运行 |
-| mac OS X 10.2 | 可运行 |
-| mac OS X 10.3 | 可运行 |
-| mac OS X 10.4 | 可运行 |
-| mac OS X 10.5 | 可运行 |
-| mac OS X 10.6 | 可运行 |
-| mac OS X 10.7 | 可运行 |
-| mac OS X 10.8 | 可运行 |
-| mac OS X 10.9 | 可运行 |
-| Kali Linux 2024.3 | 可运行 |
+### 主程序功能
+1. **直接下载**: 输入小说ID或链接直接下载
+2. **搜索下载**: 通过关键词搜索并选择小说
+3. **批量下载**: 支持批量下载多本小说
+4. **更新小说**: 更新已下载的小说
+5. **多格式保存**: 支持TXT、EPUB、HTML、LaTeX格式
+6. **设置调整**: 自定义保存路径、格式等选项
 
-## Q&A
-### Q1：
-报错：` The above exception was the direct cause of the following exception:
-urllib3.exceptions.ProxyError: ('Unable to connect to proxy', FileNotFoundError(2, 'No such file or directory')) The above exception was the direct cause of the following exception:
-Traceback (most recent call last):
-File "requests\adapters. py", line 667, in send
-File "urllib3\connectionpool. py", line 843, in urlopen File "urllib3\util\retry. py", line 519, in increment
-urllib3. exceptions. MaxRetryError: HTTPSConnectionPool(host='fanqienovel. com', port=443): Max retries exceeded with url: /page/7143038691944959011 (Caused by ProxyError('Unable to connect to proxy', FileNotFoundError(2, 'No such file or dire ctory'))) `
-......
-### A1：
-网络错误，请检查网络连接(如：关闭代理、加速)
+### 快速测试
+```bash
+# 测试下载指定小说(ID: 7520128677003136024)
+python test_download.py
 
-### Web 版
+# 自动化测试main-fix.py功能
+python auto_test.py
+```
 
-<img src="https://github.com/user-attachments/assets/2dfb008b-bdd7-4ff8-a020-cd1e5ede1dc9" width="500">
-<img src="https://github.com/user-attachments/assets/8edee2b2-91e4-483b-bb9b-79d8b18e4a00" width="500">
-<img src="https://github.com/user-attachments/assets/f4257f33-e25e-477c-8f51-6ce5949d881f" width="500">
-<img src="https://github.com/user-attachments/assets/152638c2-43c1-49b6-a097-b50f1ac495e3" width="500">
+## 📊 支持的保存格式
 
+| 格式 | 描述 | 文件扩展名 |
+|------|------|-----------|
+| 单文件TXT | 整本小说保存为一个文件 | `.txt` |
+| 分章TXT | 每章单独保存 | `.txt` |
+| EPUB | 电子书格式 | `.epub` |
+| HTML | 网页格式 | `.html` |
+| LaTeX | 学术文档格式 | `.tex` |
 
-Web版实现的功能
-- 网页服务器下载完直接让你下载小说文件到本地，所以能远程放在容器或虚拟机中运行
-- 有进度条，漂亮！
-- 能透过 id 下载小说，也能用名字搜索小说，更能更新之前下载的小说
-- 简洁的 UI 界面
-- 队列设计，可以把好几本书加入队列，批量下载
-- 在线阅读
+## 🔍 文件结构
 
-你有3种方式运行 web 版。
+```
+fanqienovel-downloader-enhanced/
+├── src/
+│   ├── main.py           # 原版主程序
+│   ├── main-fix.py       # 优化版主程序 ⭐
+│   ├── server.py         # Web版服务器
+│   ├── charset.json      # 字符解码映射表
+│   └── ...
+├── test_download.py      # 精简测试下载器 ⭐
+├── auto_test.py          # 自动化测试脚本 ⭐
+├── requirements.txt      # 依赖包列表
+└── README.md            # 项目说明
+```
 
-1.直接执行exe文件
+## 🆚 版本对比
 
-2. Python 运行
+| 功能 | 原版 | 优化版 |
+|------|------|--------|
+| Cookie获取速度 | 慢(可能卡死) | 快(5秒内) |
+| TXT文件生成 | 不稳定 | 稳定可靠 |
+| 字符解码 | 部分乱码 | 完美解码 |
+| 错误处理 | 基础 | 增强 |
+| 测试工具 | 无 | 完整 |
 
-用 Git 克隆这个项目或直接下载项目的zip并解压。进入项目文件夹，新建虚拟环境，并用 `pip install -r requirements.txt` 来安装这个项目的 python 依赖。
+## 🐛 已修复的问题
 
-接着进入`src`目录，用python 运行 `server.py`，并根据指示用浏览器开启 `http://localhost:12930`。
-(注意：`python`版本3.8及以下版本下载项目`zip`或`git`时，`src`目录中,将原来的`main.py`删除，再把`main2.py`名称改为`main.py`)
+1. **Cookie获取卡死**: 原版在`_get_new_cookie`中使用巨大循环范围导致卡死
+2. **DownloadProgress未定义**: 类定义和引用不匹配
+3. **TXT文件生成失败**: 缺少return语句和错误的元数据处理
+4. **字符乱码**: charset.json解码逻辑不完整
+5. **进度显示错误**: 进度回调函数参数不匹配
 
-3. Docker 运行
+## 💡 使用建议
 
-用 Git 克隆这个项目或直接下载项目的zip并解压。进入项目文件夹。
+- **首次使用**: 推荐使用`test_download.py`进行快速测试
+- **日常使用**: 使用`src/main-fix.py`获得完整功能
+- **批量下载**: 利用多线程设置提升下载速度
+- **格式选择**: TXT格式兼容性最好，EPUB适合电子阅读
 
-直接使用 `docker compose up` (或是 `docker compose up -d` 在后台运行) 构建并启动镜像。启动后用浏览器访问 `http://localhost:12930`。
+## 📱 跨平台支持
 
-下载的小说和个人数据 (`data` 文件夹) 会存在docker 卷里面，分别叫做 `fanqie_data` 和 `fanqie_downloads`。如果你想修改成某个特定的目录，可以修改 `docker-compose.yaml` 文件中的持久化用户数据部分。
+| 系统 | 状态 | 备注 |
+|------|------|------|
+| Windows 10/11 | ✅ 完全支持 | |
+| macOS | ✅ 完全支持 | 已测试 |
+| Linux | ✅ 完全支持 | |
+| Android (Termux) | ✅ 支持 | 参考原版说明 |
 
-### 手机版
-#### 现在有一种方式可在手机上使用(只是ref_main.py,不是web版)
+## 🙏 致谢
 
-安装termux
+本项目基于 [ying-ck/fanqienovel-downloader](https://github.com/ying-ck/fanqienovel-downloader) 开发，感谢原作者 **Yck (ying-ck)**、**Yqy (qxqycb)** 和 **Lingo (lingo34)** 的出色工作。
 
-换源：
-`sed -i 's@^(.*deb.*stable main)$@#\1\ndeb https://mirrors.tuna.tsinghua.edu.cn/termux/apt/termux-main stable main@' $PREFIX/etc/apt/sources.list`
-`apt update && apt upgrade`
+在原版基础上，我们专注于性能优化和bug修复，让这个优秀的工具更加稳定可靠。
 
-`pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple`
+## ⚠️ 免责声明
 
-安装包：
-`pip install requests ebooklib tqdm beautifulsoup4`(注意：在ref_main.py中删掉tkinter的导入)
+此程序仅用于学习和研究Python网络爬虫技术，请勿用于商业用途或侵犯版权的行为。使用者需遵守相关法律法规和网站使用条款，因使用本程序产生的任何法律责任由使用者自行承担。
 
-运行：
-python ref_main.py
+## 📄 开源协议
 
-注意：运行环境配置正确，不要对应错误
-安装lxml库可能报错，按照以下步骤解决：
-CFLAGS="-O0" pip install lxml
+本程序遵循 [AGPL-3.0](LICENSE) 开源协议。使用本程序源码时请注明来源，并使用相同的开源协议。
 
+## 🔗 相关链接
 
+- **原项目**: [ying-ck/fanqienovel-downloader](https://github.com/ying-ck/fanqienovel-downloader)
+- **问题反馈**: [Issues](../../issues)
+- **功能请求**: [Issues](../../issues)
 
-## 集思广益
+---
 
-若各位使用者有什么意见或程序有什么错误，欢迎在lssues中讨论
-
-## 免责声明
-
-此程序旨在用于与Python网络爬虫和网页处理技术相关的教育和研究目的。不应将其用于任何非法活动或侵犯他人权利的行为。用户对使用此程序引发的任何法律责任和风险负有责任，作者和项目贡献者不对因使用程序而导致的任何损失或损害承担责任
-
-在使用此程序之前，请确保遵守相关法律法规以及网站的使用政策，并在有任何疑问或担忧时咨询法律顾问
-
-This program is designed for educational and research purposes related to Python web crawlers and web page processing technologies. It should not be used for any illegal activities or acts that violate the rights of others. Users are responsible for any legal liabilities and risks arising from the use of this program. The author and project contributors are not responsible for any losses or damages resulting from the use of the program.
-
-Before using this program, please ensure compliance with relevant laws and regulations and the website's usage policies. Consult a legal advisor if you have any questions or concerns.
-
-## 开源
-
-本程序遵循[AGPL-3.0](https://github.com/ying-ck/fanqienovel-downloader?tab=AGPL-3.0-1-ov-file)开源。使用本程序源码时请注明来源，并同样使用此协议。
-
-## 作者
-
-- 作者：Yck (ying-ck) & Yqy(qxqycb) & Lingo(lingo34)
-
-## Star趋势
-
-![Stars](https://api.star-history.com/svg?repos=ying-ck/fanqienovel-downloader&type=Date)
-![Alt](https://repobeats.axiom.co/api/embed/e76cbd049219133920a113b6f4f33973e36f7fd7.svg "Repobeats analytics image")
+📢 **如果这个项目对你有帮助，请给个 ⭐ Star 支持一下！**
