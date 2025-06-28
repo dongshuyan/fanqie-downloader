@@ -102,7 +102,10 @@ network:
   timeout: 30
   
   # 重试次数
-  retry_count: 3
+  retry_count: 10
+  
+  # 重试间隔(秒) - 第1次重试等1秒，第2次等2秒，第3次等4秒
+  retry_delays: [1, 2, 4, 8, 16, 32, 64, 120, 120, 120]
   
   # 用户代理轮换 (默认: true)
   rotate_user_agent: true

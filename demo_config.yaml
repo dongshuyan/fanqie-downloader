@@ -51,4 +51,17 @@ authentication:
 # ================== 日志配置 ==================
 logging:
   # 详细输出模式（方便调试）
-  level: "verbose" 
+  level: "verbose"
+
+# ================== 网络配置 ==================
+network:
+  timeout: 30               # 网络请求超时时间(秒)
+  retry_count: 3            # 重试次数
+  retry_delays: [1, 2, 4]   # 重试间隔(秒) - 第1次重试等1秒，第2次等2秒，第3次等4秒
+  rotate_user_agent: true   # 是否轮换User-Agent
+
+# ================== 高级选项 ==================
+advanced:
+  enable_experimental: false   # 是否启用实验性功能
+  memory_mode: "normal"        # 内存使用模式: low, normal, high
+  show_progress_bar: true      # 是否显示进度条 

@@ -71,6 +71,7 @@ class Config:
     # 网络配置
     timeout: int = 30
     retry_count: int = 3
+    retry_delays: List[int] = field(default_factory=lambda: [1, 2, 4])  # 重试间隔(秒)
     rotate_user_agent: bool = True
     
     # 日志配置
@@ -170,6 +171,7 @@ class Config:
                 net = data['network']
                 config.timeout = net.get('timeout', 30)
                 config.retry_count = net.get('retry_count', 3)
+                config.retry_delays = net.get('retry_delays', [1, 2, 4])
                 config.rotate_user_agent = net.get('rotate_user_agent', True)
             
             # 日志配置
@@ -250,6 +252,12 @@ class NovelDownloader:
         self.tcs = 0  # Test counter
         self.tzj = None  # Test chapter ID
         self.book_json_path = None  # Current book's JSON path
+        
+        # 反爬检测和自适应延时
+        self.empty_content_count = 0  # 连续空内容计数
+        self.total_empty_count = 0    # 总计空内容计数
+        self.adaptive_delay_multiplier = 1.0  # 自适应延时倍数
+        self.last_successful_time = time.time()  # 上次成功时间
 
     def _setup_directories(self):
         """Create necessary directories if they don't exist"""
@@ -294,6 +302,28 @@ class NovelDownloader:
             'description': desc,
             'chapter_title': chapter_title
         }
+    
+    def _write_debug_log(self, message: str):
+        """写入调试日志到文件和控制台"""
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_message = f"[{timestamp}] {message}"
+        
+        # 输出到控制台（如果启用了详细日志）
+        if hasattr(self.config, 'log_level') and self.config.log_level == 'debug':
+            self.log_callback(log_message)
+        
+        # 写入日志文件
+        log_dir = "logs"
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, "download_debug.log")
+        
+        try:
+            with open(log_file, 'a', encoding='utf-8') as f:
+                f.write(log_message + '\n')
+        except Exception as e:
+            # 避免日志写入失败影响主程序
+            pass
 
     def download_novel(self, novel_id: int) -> str:
         """Download a novel"""
@@ -339,22 +369,121 @@ class NovelDownloader:
                     }
 
                     for future in concurrent.futures.as_completed(future_to_chapter):
-                        title, _ = future_to_chapter[future]
+                        title, chapter_id = future_to_chapter[future]
                         try:
                             content = future.result()
                             if content:
+                                # 记录详细的章节下载信息
+                                self._write_debug_log(f"✅ 成功下载章节: 「{title}」(ID: {chapter_id}) - 内容长度: {len(content)} 字符")
+                                
+                                # 🚨 关键调试点：检查标题处理过程
+                                self._write_debug_log(f"🔍 【文件保存调试】开始处理章节文件保存")
+                                self._write_debug_log(f"🔍 原始title: {repr(title)} (类型: {type(title).__name__})")
+                                
                                 clean_title = title.strip()
-                                novel_content[clean_title] = content  # 保存时去除标题的空白字符
+                                self._write_debug_log(f"🔍 clean_title: {repr(clean_title)} (类型: {type(clean_title).__name__})")
                                 
-                                # 额外保存单独的章节TXT文件到Chapters文件夹
-                                chapter_filename = f"{self._sanitize_filename(clean_title)}.txt"
+                                novel_content[clean_title] = content
+                                
+                                # 🚨 关键调试点：文件名生成过程
+                                self._write_debug_log(f"🔍 调用_sanitize_filename前: {repr(clean_title)}")
+                                sanitized_title = self._sanitize_filename(clean_title)
+                                self._write_debug_log(f"🔍 _sanitize_filename返回: {repr(sanitized_title)} (类型: {type(sanitized_title).__name__})")
+                                
+                                chapter_filename = f"{sanitized_title}.txt"
+                                self._write_debug_log(f"🔍 chapter_filename: {repr(chapter_filename)} (类型: {type(chapter_filename).__name__})")
+                                
+                                # 🚨 关键调试点：路径拼接过程
+                                self._write_debug_log(f"🔍 chapters_dir: {repr(chapters_dir)} (类型: {type(chapters_dir).__name__})")
+                                self._write_debug_log(f"🔍 准备调用os.path.join({repr(chapters_dir)}, {repr(chapter_filename)})")
+                                
                                 chapter_path = os.path.join(chapters_dir, chapter_filename)
+                                self._write_debug_log(f"🔍 chapter_path: {repr(chapter_path)} (类型: {type(chapter_path).__name__})")
                                 
+                                # 🚨 关键调试点：文件写入过程
+                                self._write_debug_log(f"🔍 准备打开文件: {repr(chapter_path)}")
                                 with open(chapter_path, 'w', encoding='UTF-8') as f:
                                     f.write(f"{clean_title}\n\n{content}")
+                                self._write_debug_log(f"✅ 章节文件保存成功: {chapter_path}")
+                            else:
+                                # 内容为空的情况
+                                self._write_debug_log(f"⚠️ 章节内容为空: 「{title}」(ID: {chapter_id})")
+                                self.log_callback(f"⚠️ 章节「{title}」下载失败: 内容为空")
                                     
                         except Exception as e:
-                            self.log_callback(f'下载章节失败 {title}: {str(e)}')
+                            # 🚨🚨🚨 完整的错误信息输出 - 用户强调的关键需求！🚨🚨🚨
+                            self._write_debug_log(f"❌❌❌ 【完整错误报告】章节下载异常: 「{title}」(ID: {chapter_id}) ❌❌❌")
+                            self._write_debug_log(f"=" * 100)
+                            
+                            # 基本信息
+                            self._write_debug_log(f"🔍 标题信息:")
+                            self._write_debug_log(f"   - 标题类型: {type(title).__name__}")
+                            self._write_debug_log(f"   - 标题内容: {repr(title)}")
+                            self._write_debug_log(f"   - 标题长度: {len(title) if title else 'None'}")
+                            self._write_debug_log(f"🔍 章节ID信息:")
+                            self._write_debug_log(f"   - 章节ID类型: {type(chapter_id).__name__}")
+                            self._write_debug_log(f"   - 章节ID内容: {repr(chapter_id)}")
+                            
+                            # 错误详情
+                            self._write_debug_log(f"❌ 错误详情:")
+                            self._write_debug_log(f"   - 错误类型: {type(e).__name__}")
+                            self._write_debug_log(f"   - 错误详情: {str(e)}")
+                            self._write_debug_log(f"   - 错误参数: {getattr(e, 'args', 'No args')}")
+                            self._write_debug_log(f"   - 完整异常信息: {repr(e)}")
+                            
+                            # 🚨 关键：尝试获取该章节的完整响应内容
+                            self._write_debug_log(f"🌐 尝试获取该章节的完整网络响应:")
+                            try:
+                                # 强制获取该章节的原始响应
+                                test_content = self._download_chapter_content(int(chapter_id), test_mode=True)
+                                self._write_debug_log(f"📥 原始响应内容类型: {type(test_content).__name__}")
+                                self._write_debug_log(f"📥 原始响应长度: {len(test_content) if test_content else 'None'}")
+                                self._write_debug_log(f"📥 原始响应前500字符: {repr(test_content[:500]) if test_content else 'None'}")
+                                if test_content and len(test_content) > 500:
+                                    self._write_debug_log(f"📥 原始响应后200字符: {repr(test_content[-200:])}")
+                                self._write_debug_log(f"📥 完整原始响应: {repr(test_content)}")
+                            except Exception as response_error:
+                                self._write_debug_log(f"💥 获取原始响应失败: {str(response_error)}")
+                                self._write_debug_log(f"💥 响应错误类型: {type(response_error).__name__}")
+                                self._write_debug_log(f"💥 响应错误详情: {repr(response_error)}")
+                            
+                            # 环境状态信息
+                            self._write_debug_log(f"🌍 环境状态:")
+                            self._write_debug_log(f"   - chapters_dir: {repr(chapters_dir)}")
+                            self._write_debug_log(f"   - chapters_dir类型: {type(chapters_dir).__name__}")
+                            self._write_debug_log(f"   - chapters_dir存在: {os.path.exists(chapters_dir) if chapters_dir else 'chapters_dir is None'}")
+                            self._write_debug_log(f"   - 当前工作目录: {repr(os.getcwd())}")
+                            
+                            # 局部变量状态
+                            self._write_debug_log(f"📊 局部变量状态:")
+                            local_vars = ['content', 'clean_title', 'sanitized_title', 'chapter_filename', 'chapter_path']
+                            for var_name in local_vars:
+                                if var_name in locals():
+                                    var_value = locals()[var_name]
+                                    self._write_debug_log(f"   - {var_name}: {repr(var_value)} (类型: {type(var_value).__name__})")
+                                else:
+                                    self._write_debug_log(f"   - {var_name}: 未定义")
+                            
+                            # 特殊处理路径相关错误
+                            if "PathLike" in str(e) or "NoneType" in str(e):
+                                self._write_debug_log(f"🚨 检测到路径或NoneType错误 - 深度分析:")
+                                
+                                # 测试_sanitize_filename函数
+                                try:
+                                    test_title = title.strip() if title else "ERROR_None_Title"
+                                    sanitized = self._sanitize_filename(test_title)
+                                    self._write_debug_log(f"   🔧 _sanitize_filename测试: {repr(test_title)} -> {repr(sanitized)}")
+                                except Exception as sanitize_error:
+                                    self._write_debug_log(f"   💥 _sanitize_filename测试失败: {str(sanitize_error)}")
+                                    self._write_debug_log(f"   💥 _sanitize_filename错误详情: {repr(sanitize_error)}")
+                            
+                            self._write_debug_log(f"=" * 100)
+                            self._write_debug_log(f"❌❌❌ 【完整错误报告结束】 ❌❌❌")
+                            
+                            # 输出到控制台让用户看到真正的问题
+                            self.log_callback(f'❌ 下载章节失败「{title}」: {str(e)}')
+                            
+                            # 继续处理其他章节，但保留完整的错误记录
 
                         completed_chapters += 1
                         pbar.update(1)
@@ -713,33 +842,76 @@ class NovelDownloader:
                     self.progress_callback(total_chapters, total_chapters, '下载完成')
 
     def _download_chapter(self, title: str, chapter_id: str, existing_content: Dict) -> Optional[str]:
-        """Download a single chapter with retries"""
+        """Download a single chapter with retries and intelligent error handling"""
         if title in existing_content:
-            self.zj[title] = existing_content[title]  # Add this
+            self.zj[title] = existing_content[title]
             return existing_content[title]
 
         self.log_callback(f'下载章节: {title}')
-        retries = 3
+        retries = self.config.retry_count
         last_error = None
+        
+        # 详细记录重试过程
+        self._write_debug_log(f"🔄 开始下载章节「{title}」(ID: {chapter_id}) - 最大重试次数: {retries}")
+        self._write_debug_log(f"📋 重试间隔配置: {self.config.retry_delays}")
 
         while retries > 0:
             try:
+                self._write_debug_log(f"📡 尝试下载章节「{title}」- 剩余重试次数: {retries}")
+                
                 content = self._download_chapter_content(chapter_id)
-                if content == 'err':  # Add this check
-                    raise Exception('Download failed')
-
-                time.sleep(random.randint(
-                    self.config.delay[0],
-                    self.config.delay[1]
-                ) / 1000)
-
-                # Handle cookie refresh
-                if content == 'err':
+                
+                # 统一处理各种失败情况
+                if content == 'err' or not content or not content.strip():
                     self.tcs += 1
+                    
+                    if content == 'err':
+                        error_msg = "API返回错误"
+                    elif not content:
+                        error_msg = "返回内容为None"
+                    else:
+                        error_msg = "返回内容为空字符串"
+                    
+                    # 更新反爬检测统计
+                    self.empty_content_count += 1
+                    self.total_empty_count += 1
+                    
+                    # 检测反爬情况并调整策略
+                    if self.empty_content_count >= 3:
+                        self.adaptive_delay_multiplier = min(5.0, self.adaptive_delay_multiplier + 0.5)
+                        self._write_debug_log(f"🚨 连续失败 {self.empty_content_count} 次，疑似反爬检测！")
+                        self._write_debug_log(f"📊 调整延时倍数至: {self.adaptive_delay_multiplier:.1f}")
+                        self.log_callback(f"🚨 检测到连续失败，已调整下载策略")
+                    
+                    # 记录详细的失败信息
+                    time_since_success = time.time() - self.last_successful_time
+                    self._write_debug_log(f"⚠️ 章节「{title}」下载异常: {error_msg}")
+                    self._write_debug_log(f"📊 失败统计 - 连续: {self.empty_content_count}, 总计: {self.total_empty_count}")
+                    self._write_debug_log(f"⏰ 距离上次成功: {time_since_success:.1f}秒")
+                    
+                    # Cookie 刷新机制
                     if self.tcs > 7:
                         self.tcs = 0
+                        self._write_debug_log(f"🔄 触发Cookie刷新 (chapter_id: {chapter_id})")
                         self._get_new_cookie(self.tzj)
-                    continue  # Try again with new cookie
+                        self.log_callback(f"🔄 检测到多次失败，已刷新Cookie")
+                    
+                    raise Exception(f"Chapter download failed: {error_msg}")
+
+                # 成功时更新统计信息
+                self.empty_content_count = 0  # 重置连续空内容计数
+                self.last_successful_time = time.time()
+                
+                # 根据成功情况调整延时倍数
+                if self.adaptive_delay_multiplier > 1.0:
+                    self.adaptive_delay_multiplier = max(1.0, self.adaptive_delay_multiplier - 0.1)
+                    self._write_debug_log(f"📈 下载成功，降低延时倍数至: {self.adaptive_delay_multiplier:.1f}")
+                
+                # 自适应延时
+                base_delay_ms = random.randint(self.config.delay[0], self.config.delay[1])
+                actual_delay_ms = int(base_delay_ms * self.adaptive_delay_multiplier)
+                self._write_debug_log(f"⏱️ 章节「{title}」下载成功，延时 {actual_delay_ms}ms (基础:{base_delay_ms}ms × 倍数:{self.adaptive_delay_multiplier:.1f})")
+                time.sleep(actual_delay_ms / 1000)
 
                 # Save progress periodically
                 self.cs += 1
@@ -747,16 +919,56 @@ class NovelDownloader:
                     self.cs = 0
                     self._save_progress(title, content)
 
-                self.zj[title] = content  # Add this
+                self.zj[title] = content
+                self._write_debug_log(f"✅ 章节「{title}」下载完成，内容长度: {len(content)} 字符")
                 return content
 
             except Exception as e:
                 last_error = e
                 retries -= 1
-                if retries == 0:
+                
+                self._write_debug_log(f"❌ 章节「{title}」重试失败: {str(e)} (剩余重试: {retries})")
+                
+                if retries > 0:
+                    # 使用配置文件中的重试间隔
+                    attempt_index = self.config.retry_count - retries
+                    if attempt_index < len(self.config.retry_delays):
+                        retry_delay = self.config.retry_delays[attempt_index]
+                    else:
+                        # 如果重试次数超过配置的间隔数组，使用最后一个值
+                        retry_delay = self.config.retry_delays[-1]
+                    
+                    # 🚨 用户要求：明确失败原因
+                    failure_reason = self._get_failure_reason(e)
+                    
+                    # 🚨 用户要求：重试时的Cookie刷新检查
+                    cookie_action = ""
+                    if self.tcs > 3:  # 降低Cookie刷新阈值，让重试时更容易触发
+                        self.tcs = 0
+                        # 修复Cookie刷新：使用有效的chapter_id
+                        effective_chapter_id = int(chapter_id) if chapter_id else (self.tzj if self.tzj else 1)
+                        self._write_debug_log(f"🔄 重试时触发Cookie刷新 (effective_chapter_id: {effective_chapter_id})")
+                        self._get_new_cookie(effective_chapter_id)
+                        cookie_action = " (已刷新Cookie)"
+                    
+                    self._write_debug_log(f"⏳ 等待 {retry_delay}s 后重试... (重试间隔配置索引: {attempt_index})")
+                    
+                    # 🚨 用户要求：包含具体失败原因的重试日志
+                    self.log_callback(f"⚠️ 章节「{title}」下载失败 ({failure_reason})，{retry_delay}s后重试 (剩余{retries}次){cookie_action}")
+                    
+                    # 必要时输出完整响应
+                    if "内容为空" not in failure_reason and "网络" not in failure_reason:
+                        self._write_debug_log(f"📥 重试前获取完整响应内容:")
+                        try:
+                            debug_content = self._download_chapter_content(int(chapter_id), test_mode=True)
+                            self._write_debug_log(f"📥 完整响应: {repr(debug_content[:1000])}{'...' if len(debug_content) > 1000 else ''}")
+                        except:
+                            self._write_debug_log(f"📥 无法获取响应内容")
+                    
+                    time.sleep(retry_delay)
+                else:
+                    self._write_debug_log(f"💥 章节「{title}」最终下载失败: {str(e)}")
                     self.log_callback(f'下载失败 {title}: {str(e)}')
-                    break
-                time.sleep(1)
 
         if last_error:
             raise last_error
@@ -1229,37 +1441,79 @@ class NovelDownloader:
         return 'err'
 
     def _get_chapter_list(self, novel_id: int) -> tuple:
-        """Get novel info and chapter list"""
+        """Get novel info and chapter list with detailed logging"""
         url = f'https://fanqienovel.com/page/{novel_id}'
+        
+        # 详细记录请求信息
+        self._write_debug_log(f"🌐 请求章节列表: {url}")
+        self._write_debug_log(f"🔑 使用Cookie: {self.cookie}")
+        
         response = req.get(url, headers=self.headers)
+        self._write_debug_log(f"📡 响应状态码: {response.status_code}")
+        self._write_debug_log(f"📏 响应内容长度: {len(response.text)} 字符")
+        
         ele = etree.HTML(response.text)
 
         chapters = {}
         a_elements = ele.xpath('//div[@class="chapter"]/div/a')
-        if not a_elements:  # Add this check
+        self._write_debug_log(f"📚 找到章节元素数量: {len(a_elements)}")
+        
+        if not a_elements:
+            self._write_debug_log("❌ 未找到任何章节元素，可能是页面结构变化或访问受限")
             return 'err', {}, []
 
-        for a in a_elements:
+        null_title_count = 0
+        valid_chapters = 0
+        
+        for i, a in enumerate(a_elements):
             href = a.xpath('@href')
-            if not href:  # Add this check
+            if not href:
+                self._write_debug_log(f"⚠️ 第{i+1}个章节元素缺少href属性")
                 continue
-            chapters[a.text] = href[0].split('/')[-1]
+                
+            chapter_title = a.text
+            chapter_id = href[0].split('/')[-1]
+            
+            # 详细记录每个章节的信息
+            if not chapter_title or not chapter_title.strip():
+                null_title_count += 1
+                self._write_debug_log(f"🚨 第{i+1}个章节标题为空! 章节ID: {chapter_id}")
+                self._write_debug_log(f"   - 元素HTML: {etree.tostring(a, encoding='unicode')[:200]}")
+                # 不生成假标题，保留问题让用户知道
+                continue
+            else:
+                chapters[chapter_title.strip()] = chapter_id
+                valid_chapters += 1
+                if i < 5 or i % 100 == 0:  # 记录前5个和每100个章节
+                    self._write_debug_log(f"✅ 章节{i+1}: 「{chapter_title.strip()}」-> ID: {chapter_id}")
+
+        self._write_debug_log(f"📊 章节统计: 有效章节 {valid_chapters} 个，空标题章节 {null_title_count} 个")
+        
+        if null_title_count > 0:
+            self.log_callback(f"⚠️ 发现 {null_title_count} 个空标题章节，这些章节将被跳过")
+            self.log_callback(f"💡 建议检查网络连接或稍后重试，也可能是网站反爬虫机制")
 
         title = ele.xpath('//h1/text()')
         status = ele.xpath('//span[@class="info-label-yellow"]/text()')
+        
+        self._write_debug_log(f"📖 小说标题: {title[0] if title else '未找到'}")
+        self._write_debug_log(f"📊 小说状态: {status[0] if status else '未找到'}")
 
-        if not title or not status:  # Check both title and status
+        if not title or not status:
+            self._write_debug_log("❌ 无法获取小说基本信息（标题或状态）")
             return 'err', {}, []
 
         return title[0], chapters, status
 
     def _download_chapter_content(self, chapter_id: int, test_mode: bool = False) -> str:
-        """Download content with fallback and better error handling"""
+        """Download content with fallback and enhanced error handling"""
         headers = self.headers.copy()
         headers['cookie'] = self.cookie
 
         for attempt in range(3):
             try:
+                self._write_debug_log(f"📡 尝试方法1: 标准API (章节ID: {chapter_id}, 尝试: {attempt + 1}/3)")
+                
                 # Try primary method
                 response = req.get(
                     f'https://fanqienovel.com/reader/{chapter_id}',
@@ -1267,24 +1521,40 @@ class NovelDownloader:
                     timeout=10
                 )
                 response.raise_for_status()
+                
+                self._write_debug_log(f"📥 API响应状态: {response.status_code}, 内容长度: {len(response.text)}")
 
                 content = '\n'.join(
                     etree.HTML(response.text).xpath(
                         '//div[@class="muye-reader-content noselect"]//p/text()'
                     )
                 )
+                
+                self._write_debug_log(f"📝 XPath提取结果长度: {len(content)} 字符")
 
                 if test_mode:
                     return content
 
+                # 检查内容是否有效
+                if not content or len(content.strip()) < 10:
+                    self._write_debug_log(f"⚠️ 方法1内容过短或为空: {repr(content[:100])}")
+                    raise Exception(f"Content too short or empty (length: {len(content)})")
+
                 try:
-                    return self._decode_content(content)
-                except:
+                    decoded = self._decode_content(content)
+                    self._write_debug_log(f"✅ 内容解码成功，最终长度: {len(decoded)} 字符")
+                    return decoded
+                except Exception as decode_err:
+                    self._write_debug_log(f"⚠️ 解码模式0失败: {str(decode_err)}")
                     # Try alternative decoding mode
                     try:
-                        return self._decode_content(content, mode=1)
-                    except:
+                        decoded = self._decode_content(content, mode=1)
+                        self._write_debug_log(f"✅ 解码模式1成功，最终长度: {len(decoded)} 字符")
+                        return decoded
+                    except Exception as decode_err2:
+                        self._write_debug_log(f"⚠️ 解码模式1失败: {str(decode_err2)}")
                         # Fallback HTML processing
+                        self._write_debug_log(f"🔄 使用后备HTML处理")
                         content = content[6:]
                         tmp = 1
                         result = ''
@@ -1297,26 +1567,56 @@ class NovelDownloader:
                                 result += i
                             elif tmp == 1 and i == 'p':
                                 result = (result + '\n').replace('\n\n', '\n')
-                        return result
+                        
+                        if result and len(result.strip()) > 10:
+                            self._write_debug_log(f"✅ 后备处理成功，最终长度: {len(result)} 字符")
+                            return result
+                        else:
+                            raise Exception(f"Fallback processing failed, result too short: {len(result)}")
 
             except Exception as e:
+                self._write_debug_log(f"❌ 方法1失败: {str(e)}")
+                
                 # Try alternative API endpoint
                 try:
+                    self._write_debug_log(f"🔄 尝试方法2: 备用API (章节ID: {chapter_id})")
+                    
                     response = req.get(
                         f'https://fanqienovel.com/api/reader/full?itemId={chapter_id}',
-                        headers=headers
+                        headers=headers,
+                        timeout=10
                     )
-                    content = json.loads(response.text)['data']['chapterData']['content']
+                    response.raise_for_status()
+                    
+                    self._write_debug_log(f"📥 备用API响应状态: {response.status_code}")
+                    
+                    data = json.loads(response.text)
+                    content = data['data']['chapterData']['content']
+                    
+                    self._write_debug_log(f"📝 备用API内容长度: {len(content)} 字符")
 
                     if test_mode:
                         return content
+                    
+                    # 检查内容是否有效
+                    if not content or len(content.strip()) < 10:
+                        self._write_debug_log(f"⚠️ 方法2内容过短或为空: {repr(content[:100])}")
+                        raise Exception(f"Backup API content too short (length: {len(content)})")
 
-                    return self._decode_content(content)
-                except:
+                    decoded = self._decode_content(content)
+                    self._write_debug_log(f"✅ 备用API解码成功，最终长度: {len(decoded)} 字符")
+                    return decoded
+                    
+                except Exception as backup_err:
+                    self._write_debug_log(f"❌ 方法2也失败: {str(backup_err)}")
+                    
                     if attempt == 2:  # Last attempt
+                        self._write_debug_log(f"💥 所有方法均失败，章节ID: {chapter_id}")
                         if test_mode:
                             return 'err'
-                        raise Exception(f"Download failed after 3 attempts: {str(e)}")
+                        raise Exception(f"All download methods failed. Primary: {str(e)}, Backup: {str(backup_err)}")
+                    
+                    self._write_debug_log(f"⏳ 等待1秒后重试...")
                     time.sleep(1)
 
     def _get_author_info(self, novel_id: int) -> Optional[str]:
@@ -1406,12 +1706,73 @@ class NovelDownloader:
         # 如果没有找到章节编号，返回0（将排在最前面）
         return 0
 
+    def _get_failure_reason(self, exception: Exception) -> str:
+        """根据异常类型返回用户友好的失败原因"""
+        error_str = str(exception).lower()
+        
+        if "chapter download failed" in error_str:
+            if "api返回错误" in error_str:
+                return "API返回错误"
+            elif "返回内容为none" in error_str:
+                return "响应内容为空(None)"
+            elif "返回内容为空字符串" in error_str:
+                return "响应内容为空字符串"
+            else:
+                return "内容获取失败"
+        elif "timeout" in error_str or "timed out" in error_str:
+            return "网络超时"
+        elif "connection" in error_str:
+            return "网络连接错误"
+        elif "404" in error_str:
+            return "章节不存在(404)"
+        elif "403" in error_str:
+            return "访问被拒绝(403)"
+        elif "500" in error_str:
+            return "服务器错误(500)"
+        elif "nonetype" in error_str and "pathlike" in error_str:
+            return "文件路径错误(变量为None)"
+        elif "decode" in error_str or "encoding" in error_str:
+            return "内容解码错误"
+        elif "json" in error_str:
+            return "JSON解析错误"
+        else:
+            # 🚨 用户要求：不要截断错误信息，显示完整内容
+            return f"未知错误: {str(exception)}"
+
     def _sanitize_filename(self, filename: str) -> str:
-        """Sanitize filename for different platforms"""
+        """Sanitize filename for different platforms with enhanced debugging"""
+        self._write_debug_log(f"🔧 _sanitize_filename调用 - 输入: {repr(filename)} (类型: {type(filename).__name__})")
+        
+        # 处理None或空值的情况
+        if filename is None:
+            self._write_debug_log(f"❌ _sanitize_filename: 输入为None!")
+            result = "ERROR_None_filename"
+            self._write_debug_log(f"🔧 _sanitize_filename返回: {repr(result)}")
+            return result
+        
+        if not filename:
+            self._write_debug_log(f"❌ _sanitize_filename: 输入为空字符串!")
+            result = "ERROR_Empty_filename"
+            self._write_debug_log(f"🔧 _sanitize_filename返回: {repr(result)}")
+            return result
+        
+        # 确保输入是字符串类型
+        if not isinstance(filename, str):
+            self._write_debug_log(f"❌ _sanitize_filename: 输入不是字符串类型: {type(filename)}")
+            filename_str = str(filename)
+            self._write_debug_log(f"🔄 转换为字符串: {repr(filename_str)}")
+            filename = filename_str
+        
+        original_filename = filename
         illegal_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*']
         illegal_chars_rep = ['＜', '＞', '：', '＂', '／', '＼', '｜', '？', '＊']
+        
         for old, new in zip(illegal_chars, illegal_chars_rep):
-            filename = filename.replace(old, new)
+            if old in filename:
+                self._write_debug_log(f"🔄 替换字符: '{old}' -> '{new}'")
+                filename = filename.replace(old, new)
+        
+        self._write_debug_log(f"🔧 _sanitize_filename完成 - 原始: {repr(original_filename)} -> 结果: {repr(filename)}")
         return filename
 
     def _parse_novel_id(self, novel_id: Union[str, int]) -> Optional[int]:
