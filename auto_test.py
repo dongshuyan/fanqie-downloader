@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-自动测试脚本 - 验证main-fix.py的TXT文件生成功能
+自动测试脚本 - 验证main.py的TXT文件生成功能
 """
 
 import sys
@@ -9,14 +9,14 @@ import os
 sys.path.append('src')
 
 from importlib import import_module
-main_fix = import_module('main-fix')
-NovelDownloader = main_fix.NovelDownloader
-Config = main_fix.Config
-SaveMode = main_fix.SaveMode
+main_module = import_module('main')
+NovelDownloader = main_module.NovelDownloader
+Config = main_module.Config
+SaveMode = main_module.SaveMode
 
 def test_download():
     """测试下载功能"""
-    print("🔥 开始自动测试main-fix.py")
+    print("🔥 开始自动测试main.py")
     print("📋 目标小说ID: 7520128677003136024")
     print("-"*50)
     

@@ -39,8 +39,8 @@ pip install -r requirements.txt
 
 ### 运行程序
 ```bash
-# 运行优化版本
-python src/main-fix.py
+# 运行主程序(优化版本)
+python src/main.py
 
 # 或运行精简测试版本
 python test_download.py
@@ -61,7 +61,7 @@ python test_download.py
 # 测试下载指定小说(ID: 7520128677003136024)
 python test_download.py
 
-# 自动化测试main-fix.py功能
+# 自动化测试main.py功能
 python auto_test.py
 ```
 
@@ -80,8 +80,7 @@ python auto_test.py
 ```
 fanqienovel-downloader-enhanced/
 ├── src/
-│   ├── main.py           # 原版主程序
-│   ├── main-fix.py       # 优化版主程序 ⭐
+│   ├── main.py           # 主程序(优化版本) ⭐
 │   ├── server.py         # Web版服务器
 │   ├── charset.json      # 字符解码映射表
 │   └── ...
@@ -112,7 +111,7 @@ fanqienovel-downloader-enhanced/
 ## 💡 使用建议
 
 - **首次使用**: 推荐使用`test_download.py`进行快速测试
-- **日常使用**: 使用`src/main-fix.py`获得完整功能
+- **日常使用**: 使用`src/main.py`获得完整功能
 - **批量下载**: 利用多线程设置提升下载速度
 - **格式选择**: TXT格式兼容性最好，EPUB适合电子阅读
 

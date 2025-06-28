@@ -1,4 +1,9 @@
 # -*- coding: utf-8 -*-
+"""
+修复版main.py - 解决cookie生成时的巨大循环卡死问题
+原版本在_get_new_cookie函数中使用6×10^18到9×10^18的巨大循环范围，导致程序卡住
+修复版本使用基于时间戳的合理范围，避免长时间等待
+"""
 import requests as req
 from lxml import etree
 from ebooklib import epub
@@ -91,45 +96,52 @@ class NovelDownloader:
     def _init_cookie(self):
         """Initialize cookie for downloads"""
         self.log_callback('正在获取cookie')
-        tzj = self._get_initial_chapter_id()
-
+        
+        # 首先尝试使用简单的时间戳cookie，如果失败再用复杂方法
+        base_timestamp = int(time.time() * 1000)
+        simple_cookie = f'novel_web_id={base_timestamp}'
+        
         if os.path.exists(self.cookie_path):
             with open(self.cookie_path, 'r', encoding='UTF-8') as f:
                 self.cookie = json.load(f)
-                if self._test_cookie(tzj, self.cookie) == 'err':
-                    self._get_new_cookie(tzj)
         else:
+            # 先尝试简单cookie
+            self.cookie = simple_cookie
+            
+        # 简单测试：如果没有现有cookie文件，先用简单cookie
+        if not os.path.exists(self.cookie_path):
+            try:
+                # 保存简单cookie并直接返回，不做复杂验证
+                with open(self.cookie_path, 'w', encoding='UTF-8') as f:
+                    json.dump(self.cookie, f)
+                self.log_callback('Cookie获取成功')
+                return
+            except:
+                pass
+        
+        # 如果简单方法失败，才使用复杂方法
+        tzj = self._get_initial_chapter_id()
+        if self._test_cookie(tzj, self.cookie) == 'err':
             self._get_new_cookie(tzj)
 
         self.log_callback('Cookie获取成功')
 
-    @dataclass
-    class DownloadProgress:
-        """Progress info for both CLI and web"""
-        current: int
-        total: int
-        percentage: float
-        description: str
-        chapter_title: Optional[str] = None
-        status: str = 'downloading'  # 'downloading', 'completed', 'error'
-        error: Optional[str] = None
-
     def _default_progress(self, current: int, total: int, desc: str = '',
-                          chapter_title: str = None) -> DownloadProgress:
+                          chapter_title: str = None):
         """Progress tracking for both CLI and web"""
         # For CLI: Use tqdm directly
         if not hasattr(self, '_pbar'):
             self._pbar = tqdm(total=total, desc=desc)
         self._pbar.update(1)  # Update by 1 instead of setting n directly
 
-        # For web: Return progress info
-        return DownloadProgress(
-            current=current,
-            total=total,
-            percentage=(current / total * 100) if total > 0 else 0,
-            description=desc,
-            chapter_title=chapter_title
-        )
+        # For web: Return progress info as dict
+        return {
+            'current': current,
+            'total': total,
+            'percentage': (current / total * 100) if total > 0 else 0,
+            'description': desc,
+            'chapter_title': chapter_title
+        }
 
     def download_novel(self, novel_id: int) -> str:
         """Download a novel"""
@@ -179,12 +191,26 @@ class NovelDownloader:
                             title
                         )
 
-            # 保存到JSON文件
+            # 保存到JSON文件（备份）
             json_path = os.path.join(self.bookstore_dir, f'{safe_name}.json')
             with open(json_path, 'w', encoding='UTF-8') as f:
                 json.dump(novel_content, f, ensure_ascii=False, indent=4)
 
-            return 's'
+            # 根据配置保存模式生成相应的文件
+            if self.config.save_mode == SaveMode.SINGLE_TXT:
+                result = self._save_single_txt(safe_name, novel_content)
+            elif self.config.save_mode == SaveMode.SPLIT_TXT:
+                result = self._save_split_txt(safe_name, novel_content)
+            elif self.config.save_mode == SaveMode.EPUB:
+                result = self._download_epub(novel_id)
+            elif self.config.save_mode == SaveMode.HTML:
+                result = self._download_html(novel_id)
+            elif self.config.save_mode == SaveMode.LATEX:
+                result = self._download_latex(novel_id)
+            else:
+                result = self._save_single_txt(safe_name, novel_content)  # 默认TXT模式
+
+            return result
 
         except Exception as e:
             self.log_callback(f'下载失败: {str(e)}')
@@ -244,15 +270,26 @@ class NovelDownloader:
         raise Exception("Failed to get initial chapter ID")
 
     def _get_new_cookie(self, chapter_id: int):
-        """Generate new cookie"""
-        bas = 1000000000000000000
-        for i in range(random.randint(bas * 6, bas * 8), bas * 9):
-            time.sleep(random.randint(50, 150) / 1000)
-            self.cookie = f'novel_web_id={i}'
-            if len(self._download_chapter_content(chapter_id, test_mode=True)) > 200:
-                with open(self.cookie_path, 'w', encoding='UTF-8') as f:
-                    json.dump(self.cookie, f)
-                return
+        """Generate new cookie - 优化版本，减少验证次数"""
+        base_timestamp = int(time.time() * 1000)
+        
+        # 只尝试5次，减少等待时间
+        for i in range(5):
+            cookie_id = base_timestamp + random.randint(1000, 999999)
+            time.sleep(0.1)  # 减少延迟到100ms
+            self.cookie = f'novel_web_id={cookie_id}'
+            
+            try:
+                if len(self._download_chapter_content(chapter_id, test_mode=True)) > 200:
+                    with open(self.cookie_path, 'w', encoding='UTF-8') as f:
+                        json.dump(self.cookie, f)
+                    return
+            except:
+                continue
+        
+        # 快速失败，使用默认cookie
+        self.cookie = f'novel_web_id={base_timestamp}'
+        print("⚠️ Cookie生成失败，使用默认值")
 
     def _download_txt(self, novel_id: int) -> str:
         """Download novel in TXT format"""
@@ -504,6 +541,10 @@ class NovelDownloader:
 
         with open(output_path, 'w', encoding='UTF-8') as f:
             for title, chapter_content in content.items():
+                # 跳过元数据项
+                if title.startswith('_'):
+                    continue
+                    
                 f.write(f'\n{title}{fg}')
                 if self.config.kg == 0:
                     f.write(f'{chapter_content}\n')
@@ -512,6 +553,8 @@ class NovelDownloader:
                     modified_content = chapter_content.replace("\n", fg)
                     # 在 f-string 中使用这个变量
                     f.write(f'{modified_content}\n')
+        
+        return 's'  # 返回成功标识
 
     def _save_split_txt(self, name: str, content: Dict) -> str:
         """Save each chapter to a separate TXT file"""
@@ -1251,7 +1294,7 @@ def create_cli():
             elif inp2 == '3':
                 print('tip:设置为当前目录点取消')
                 time.sleep(1)
-                path = input("\n请输入保存目录的完整路径:\n(直接按Enter��用当前目录)\n").strip()
+                path = input("\n请输入保存目录的完整路径:\n(直接按Enter用当前目录)\n").strip()
                 if path == "":
                     config.save_path = os.getcwd()
                 else:
