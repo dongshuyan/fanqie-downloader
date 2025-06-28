@@ -18,6 +18,7 @@ import os
 import platform
 import shutil
 import concurrent.futures
+import argparse  # 添加命令行参数解析
 from typing import Callable, Optional, Dict, List, Union
 from dataclasses import dataclass, field
 from enum import Enum
@@ -1752,20 +1753,31 @@ def create_cli():
     print('本程序完全免费(此版本为WEB版，目前处于测试阶段)\nGithub: https://github.com/ying-ck/fanqienovel-downloader\n作者：Yck & qxqycb & lingo34')
     print('优化增强版 - 支持YAML配置文件')
 
-    # 检查命令行参数
-    import sys
-    config_path = 'config.yaml'
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='番茄小说下载器', add_help=False)
+    parser.add_argument('--id', type=str, help='直接下载指定ID的小说')
+    parser.add_argument('--config', type=str, default='config.yaml', help='配置文件路径')
+    parser.add_argument('-h', '--help', action='store_true', help='显示帮助信息')
+    parser.add_argument('config_file', nargs='?', help='配置文件路径（兼容旧格式）')
     
-    if len(sys.argv) > 1:
-        if sys.argv[1] in ['-h', '--help']:
-            print('\n使用方法:')
-            print('  python src/main.py                    # 使用默认配置文件 config.yaml')
-            print('  python src/main.py [配置文件路径]      # 使用指定配置文件')
-            print('  python src/main.py --help            # 显示此帮助信息')
-            print('\n配置文件示例请参考 config.yaml')
-            return
-        else:
-            config_path = sys.argv[1]
+    args = parser.parse_args()
+    
+    if args.help:
+        print('\n使用方法:')
+        print('  python src/main.py                    # 使用默认配置文件并进入交互模式')
+        print('  python src/main.py --config [配置文件] # 使用指定配置文件')
+        print('  python src/main.py --id [小说ID]      # 直接下载指定ID的小说')
+        print('  python src/main.py --help            # 显示此帮助信息')
+        print('\n示例:')
+        print('  python src/main.py --id 7520128677003136024')
+        print('  python src/main.py --config my_config.yaml --id 7520128677003136024')
+        print('\n配置文件示例请参考 config.yaml')
+        return
+    
+    # 确定配置文件路径 (兼容旧格式)
+    config_path = args.config
+    if args.config_file:
+        config_path = args.config_file
     
     # 加载配置
     if os.path.exists(config_path):
@@ -1811,6 +1823,16 @@ def create_cli():
             print("入无效，请重新运行程序并正确输入。")
     else:
         print("程序还未备份")
+    
+    # 如果提供了--id参数，直接下载并退出
+    if args.id:
+        print(f'\n🚀 开始直接下载小说ID: {args.id}')
+        result = downloader.download_novel(args.id)
+        if result:
+            print('✅ 下载完成')
+        else:
+            print('❌ 下载失败，请检查小说ID是否正确')
+        return
 
     while True:
         print('\n输入书的id直接下载\n输入下面的数字进入其他功能:')
