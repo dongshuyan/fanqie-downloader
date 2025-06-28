@@ -261,6 +261,9 @@ class NovelDownloader:
         
         # 🔄 策略2：成功下载计数器（用于主动Cookie刷新）
         self.successful_downloads = 0
+        
+        # 📝 失败章节记录（用于生成error.log）
+        self.failed_chapters = []  # 格式: [{'title': str, 'chapter_id': str, 'reason': str}]
 
     def _setup_directories(self):
         """Create necessary directories if they don't exist"""
@@ -532,9 +535,40 @@ class NovelDownloader:
         # 🚨 更激进：每20个章节主动刷新一次
         return hasattr(self, 'successful_downloads') and self.successful_downloads > 0 and self.successful_downloads % 20 == 0
 
+    def _generate_error_log(self, output_dir: str):
+        """📝 生成error.log文件记录最终失败的章节"""
+        if not self.failed_chapters:
+            return  # 没有失败章节就不生成
+        
+        error_log_path = os.path.join(output_dir, "error.log")
+        
+        try:
+            with open(error_log_path, 'w', encoding='utf-8') as f:
+                f.write("# 章节下载失败记录\n")
+                f.write(f"# 生成时间: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"# 失败章节总数: {len(self.failed_chapters)}\n")
+                f.write("# 格式: 章节标题 | 章节ID | 失败原因\n")
+                f.write("=" * 80 + "\n\n")
+                
+                for failed in self.failed_chapters:
+                    title = failed.get('title', '未知标题')
+                    chapter_id = failed.get('chapter_id', '未知ID')
+                    reason = failed.get('reason', '未知原因')
+                    f.write(f"{title} | {chapter_id} | {reason}\n")
+            
+            self.log_callback(f"📝 已生成失败章节记录: {error_log_path} ({len(self.failed_chapters)}个失败章节)")
+            self._write_debug_log(f"📝 error.log已生成: {error_log_path}")
+            
+        except Exception as e:
+            self.log_callback(f"⚠️ 生成error.log失败: {str(e)}")
+            self._write_debug_log(f"⚠️ 生成error.log失败: {str(e)}")
+
     def download_novel(self, novel_id: int) -> str:
         """Download a novel"""
         try:
+            # 📝 重置失败章节记录（每个小说单独记录）
+            self.failed_chapters = []
+            
             name, chapters, status = self._get_chapter_list(novel_id)
             if name == 'err':
                 return 'err'
@@ -687,8 +721,34 @@ class NovelDownloader:
                             self._write_debug_log(f"=" * 100)
                             self._write_debug_log(f"❌❌❌ 【完整错误报告结束】 ❌❌❌")
                             
+                            # 📝 记录最终失败的章节（用于生成error.log）
+                            failure_reason = self._get_failure_reason(e)
+                            self.failed_chapters.append({
+                                'title': title,
+                                'chapter_id': chapter_id,
+                                'reason': failure_reason
+                            })
+                            
+                            # 📝 1. 创建占位TXT文件
+                            try:
+                                clean_title = title.strip() if title else f"第{chapter_id}章"
+                                sanitized_title = self._sanitize_filename(clean_title)
+                                chapter_filename = f"{sanitized_title}.txt"
+                                chapter_path = os.path.join(chapters_dir, chapter_filename)
+                                
+                                with open(chapter_path, 'w', encoding='UTF-8') as f:
+                                    f.write(f"{clean_title}\n\n抓取内容为空")
+                                
+                                self._write_debug_log(f"📝 已创建失败章节占位文件: {chapter_path}")
+                                
+                                # 📝 2. 添加占位内容到novel_content（用于JSON和合并TXT）
+                                novel_content[clean_title] = "抓取内容为空"
+                                
+                            except Exception as placeholder_error:
+                                self._write_debug_log(f"⚠️ 创建占位文件失败: {str(placeholder_error)}")
+                            
                             # 输出到控制台让用户看到真正的问题
-                            self.log_callback(f'❌ 下载章节失败「{title}」: {str(e)}')
+                            self.log_callback(f'❌ 下载章节失败「{title}」: {failure_reason}（已创建占位文件）')
                             
                             # 继续处理其他章节，但保留完整的错误记录
 
@@ -785,9 +845,14 @@ class NovelDownloader:
                 except Exception as e:
                     self.log_callback(f'⚠️ PDF生成失败: {e}')
             
+            # 📝 生成error.log文件（如果有失败章节）
+            self._generate_error_log(book_download_dir)
+            
             # 返回结果
             if results:
                 self.log_callback(f'🎉 下载完成！已保存格式: {", ".join(results)}')
+                if self.failed_chapters:
+                    self.log_callback(f'⚠️ 注意：有 {len(self.failed_chapters)} 个章节下载失败，已创建占位文件，详情请查看 error.log')
                 return 's'
             else:
                 self.log_callback(f'⚠️ 未启用任何输出格式')
