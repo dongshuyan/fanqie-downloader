@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 import json
 import time
 import random
+import re  # 添加正则表达式模块
 import os
 import platform
 import shutil
@@ -37,7 +38,7 @@ class Config:
     save_path: str = ''
     save_mode: SaveMode = SaveMode.SINGLE_TXT
     space_mode: str = 'halfwidth'
-    xc: int = 16
+    xc: int = 8  # 修改并行度为8
 
     def __post_init__(self):
         if self.delay is None:
@@ -66,7 +67,8 @@ class NovelDownloader:
         # Use absolute paths based on script location
         self.script_dir = os.path.dirname(os.path.abspath(__file__))
         self.data_dir = os.path.join(self.script_dir, 'data')
-        self.bookstore_dir = os.path.join(self.data_dir, 'bookstore')
+        self.bookstore_dir = os.path.join(self.script_dir, 'bookstore')  # 修改：JSON文件直接放在src/bookstore
+        self.novel_downloads_dir = os.path.join(self.script_dir, 'novel_downloads')  # 新增：TXT文件放在src/novel_downloads
         self.record_path = os.path.join(self.data_dir, 'record.json')
         self.config_path = os.path.join(self.data_dir, 'config.json')
         self.cookie_path = os.path.join(self.data_dir, 'cookie.json')
@@ -92,39 +94,24 @@ class NovelDownloader:
         """Create necessary directories if they don't exist"""
         os.makedirs(self.data_dir, exist_ok=True)
         os.makedirs(self.bookstore_dir, exist_ok=True)
+        os.makedirs(self.novel_downloads_dir, exist_ok=True)  # 创建TXT文件目录
 
     def _init_cookie(self):
-        """Initialize cookie for downloads"""
-        self.log_callback('正在获取cookie')
+        """Initialize cookie for downloads - 简化版本，直接使用默认cookie"""
+        self.log_callback('正在初始化cookie')
         
-        # 首先尝试使用简单的时间戳cookie，如果失败再用复杂方法
+        # 直接使用时间戳生成默认cookie，无需验证
         base_timestamp = int(time.time() * 1000)
-        simple_cookie = f'novel_web_id={base_timestamp}'
+        self.cookie = f'novel_web_id={base_timestamp}'
         
-        if os.path.exists(self.cookie_path):
-            with open(self.cookie_path, 'r', encoding='UTF-8') as f:
-                self.cookie = json.load(f)
-        else:
-            # 先尝试简单cookie
-            self.cookie = simple_cookie
+        # 保存cookie到文件
+        try:
+            with open(self.cookie_path, 'w', encoding='UTF-8') as f:
+                json.dump(self.cookie, f)
+        except Exception:
+            pass  # 忽略保存失败，继续使用内存中的cookie
             
-        # 简单测试：如果没有现有cookie文件，先用简单cookie
-        if not os.path.exists(self.cookie_path):
-            try:
-                # 保存简单cookie并直接返回，不做复杂验证
-                with open(self.cookie_path, 'w', encoding='UTF-8') as f:
-                    json.dump(self.cookie, f)
-                self.log_callback('Cookie获取成功')
-                return
-            except:
-                pass
-        
-        # 如果简单方法失败，才使用复杂方法
-        tzj = self._get_initial_chapter_id()
-        if self._test_cookie(tzj, self.cookie) == 'err':
-            self._get_new_cookie(tzj)
-
-        self.log_callback('Cookie获取成功')
+        self.log_callback('Cookie初始化完成')
 
     def _default_progress(self, current: int, total: int, desc: str = '',
                           chapter_title: str = None):
@@ -153,6 +140,19 @@ class NovelDownloader:
             safe_name = self._sanitize_filename(name)
             self.log_callback(f'\n开始下载《{name}》，状态：{status[0]}')
 
+            # 创建"书名-id"文件夹结构
+            book_folder_name = f"{safe_name}-{novel_id}"
+            book_txt_dir = os.path.join(self.novel_downloads_dir, book_folder_name)
+            book_json_dir = os.path.join(self.bookstore_dir, book_folder_name)
+            chapters_dir = os.path.join(book_txt_dir, "Chapters")
+            
+            # 创建必需的目录
+            os.makedirs(book_txt_dir, exist_ok=True)
+            os.makedirs(book_json_dir, exist_ok=True) 
+            os.makedirs(chapters_dir, exist_ok=True)
+            
+            self.log_callback(f'创建文件夹: {book_folder_name}')
+
             # 使用原始章节列表的顺序
             chapter_list = list(chapters.items())  # 转换为列表保持顺序
             total_chapters = len(chapter_list)
@@ -178,7 +178,16 @@ class NovelDownloader:
                         try:
                             content = future.result()
                             if content:
-                                novel_content[title.strip()] = content  # 保存时去除标题的空白字符
+                                clean_title = title.strip()
+                                novel_content[clean_title] = content  # 保存时去除标题的空白字符
+                                
+                                # 额外保存单独的章节TXT文件到Chapters文件夹
+                                chapter_filename = f"{self._sanitize_filename(clean_title)}.txt"
+                                chapter_path = os.path.join(chapters_dir, chapter_filename)
+                                
+                                with open(chapter_path, 'w', encoding='UTF-8') as f:
+                                    f.write(f"{clean_title}\n\n{content}")
+                                    
                         except Exception as e:
                             self.log_callback(f'下载章节失败 {title}: {str(e)}')
 
@@ -191,16 +200,16 @@ class NovelDownloader:
                             title
                         )
 
-            # 保存到JSON文件（备份）
-            json_path = os.path.join(self.bookstore_dir, f'{safe_name}.json')
+            # 保存到JSON文件（备份）到新的文件夹结构
+            json_path = os.path.join(book_json_dir, f'{safe_name}.json')
             with open(json_path, 'w', encoding='UTF-8') as f:
                 json.dump(novel_content, f, ensure_ascii=False, indent=4)
 
-            # 根据配置保存模式生成相应的文件
+            # 根据配置保存模式生成相应的文件到新的文件夹结构
             if self.config.save_mode == SaveMode.SINGLE_TXT:
-                result = self._save_single_txt(safe_name, novel_content)
+                result = self._save_single_txt_to_folder(safe_name, novel_content, book_txt_dir)
             elif self.config.save_mode == SaveMode.SPLIT_TXT:
-                result = self._save_split_txt(safe_name, novel_content)
+                result = self._save_split_txt_to_folder(safe_name, novel_content, book_txt_dir)
             elif self.config.save_mode == SaveMode.EPUB:
                 result = self._download_epub(novel_id)
             elif self.config.save_mode == SaveMode.HTML:
@@ -208,7 +217,7 @@ class NovelDownloader:
             elif self.config.save_mode == SaveMode.LATEX:
                 result = self._download_latex(novel_id)
             else:
-                result = self._save_single_txt(safe_name, novel_content)  # 默认TXT模式
+                result = self._save_single_txt_to_folder(safe_name, novel_content, book_txt_dir)  # 默认TXT模式
 
             return result
 
@@ -536,7 +545,7 @@ class NovelDownloader:
 
     def _save_single_txt(self, name: str, content: dict) -> str:
         """Save all chapters to a single TXT file"""
-        output_path = os.path.join(self.config.save_path, f'{name}.txt')
+        output_path = os.path.join(self.novel_downloads_dir, f'{name}.txt')  # 修改：保存到novel_downloads目录
         fg = '\n' + self.config.kgf * self.config.kg
 
         with open(output_path, 'w', encoding='UTF-8') as f:
@@ -556,9 +565,82 @@ class NovelDownloader:
         
         return 's'  # 返回成功标识
 
+    def _save_single_txt_to_folder(self, name: str, content: dict, output_dir: str) -> str:
+        """Save all chapters to a single TXT file in specified folder with smart chapter ordering"""
+        output_path = os.path.join(output_dir, f'{name}.txt')
+        fg = '\n' + self.config.kgf * self.config.kg
+
+        # 提取所有章节及其编号，跳过元数据
+        chapters_with_numbers = []
+        for title, chapter_content in content.items():
+            if title.startswith('_'):
+                continue
+            chapter_num = self._extract_chapter_number(title)
+            chapters_with_numbers.append((chapter_num, title, chapter_content))
+        
+        # 按章节编号排序
+        chapters_with_numbers.sort(key=lambda x: x[0])
+        
+        self.log_callback(f'按顺序合并章节: 共 {len(chapters_with_numbers)} 章')
+        
+        with open(output_path, 'w', encoding='UTF-8') as f:
+            if not chapters_with_numbers:
+                f.write('暂无章节内容\n')
+                return 's'
+            
+            # 获取章节编号范围
+            min_chapter = chapters_with_numbers[0][0]
+            max_chapter = chapters_with_numbers[-1][0]
+            
+            # 创建章节字典以便快速查找
+            chapter_dict = {num: (title, content) for num, title, content in chapters_with_numbers}
+            
+            # 按顺序写入章节，处理缺失章节
+            for chapter_num in range(min_chapter, max_chapter + 1):
+                if chapter_num in chapter_dict:
+                    title, chapter_content = chapter_dict[chapter_num]
+                    f.write(f'\n{title}{fg}')
+                    if self.config.kg == 0:
+                        f.write(f'{chapter_content}\n')
+                    else:
+                        modified_content = chapter_content.replace("\n", fg)
+                        f.write(f'{modified_content}\n')
+                else:
+                    # 处理缺失章节
+                    missing_title = f'第 {chapter_num} 章 当前章节缺失'
+                    f.write(f'\n{missing_title}{fg}')
+                    f.write(f'抱歉，当前章节下载失败或暂不可用\n')
+                    self.log_callback(f'⚠️ 检测到缺失章节: 第 {chapter_num} 章')
+        
+        return 's'  # 返回成功标识
+
+    def _save_split_txt_to_folder(self, name: str, content: Dict, output_dir: str) -> str:
+        """Save each chapter to a separate TXT file in specified folder"""
+        chapter_output_dir = os.path.join(output_dir, name)
+        os.makedirs(chapter_output_dir, exist_ok=True)
+
+        for title, chapter_content in content.items():
+            # 跳过元数据项
+            if title.startswith('_'):
+                continue
+                
+            chapter_path = os.path.join(
+                chapter_output_dir,
+                f'{self._sanitize_filename(title)}.txt'
+            )
+            if self.config.kg == 0:
+                replacement_content = chapter_content
+            else:
+                replacement_content = chapter_content.replace("\n", self.config.kgf * self.config.kg)
+
+            with open(chapter_path, 'w', encoding='UTF-8') as f:
+                f.write(f'{replacement_content}\n')
+
+        return 's'
+
     def _save_split_txt(self, name: str, content: Dict) -> str:
         """Save each chapter to a separate TXT file"""
-        output_dir = os.path.join(self.config.save_path, name)
+        output_dir = os.path.join(self.novel_downloads_dir, name)  # 修改：保存到novel_downloads目录
         os.makedirs(output_dir, exist_ok=True)
 
         for title, chapter_content in content.items():
@@ -1054,6 +1136,39 @@ class NovelDownloader:
                 book.spine.insert(0, cover_page)
         except Exception as e:
             self.log_callback(f"添加封面失败: {str(e)}")
+
+    def _extract_chapter_number(self, title: str) -> int:
+        """Extract chapter number from title for sorting"""
+        # 尝试提取章节编号的多种模式
+        patterns = [
+            r'第\s*(\d+)\s*章',      # 第1章, 第 1 章
+            r'第\s*([一二三四五六七八九十百千万]+)\s*章',  # 第一章, 第二十章
+            r'章节?\s*(\d+)',        # 章节1, 章1  
+            r'(\d+)\s*章',           # 1章
+            r'Chapter\s*(\d+)',      # Chapter 1
+            r'Ch\s*(\d+)',           # Ch 1
+            r'^(\d+)',               # 开头的数字
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, title, re.IGNORECASE)
+            if match:
+                chapter_num_str = match.group(1)
+                
+                # 处理中文数字
+                if chapter_num_str in ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']:
+                    chinese_numbers = {'一': 1, '二': 2, '三': 3, '四': 4, '五': 5, 
+                                     '六': 6, '七': 7, '八': 8, '九': 9, '十': 10}
+                    return chinese_numbers.get(chapter_num_str, 0)
+                
+                # 处理阿拉伯数字
+                try:
+                    return int(chapter_num_str)
+                except ValueError:
+                    continue
+        
+        # 如果没有找到章节编号，返回0（将排在最前面）
+        return 0
 
     def _sanitize_filename(self, filename: str) -> str:
         """Sanitize filename for different platforms"""
