@@ -6,22 +6,20 @@ formats:
   # 启用TXT文件
   enable_txt: true
   
-  # 启用JSON备份文件  
-  enable_json: true
-  
   # 启用EPUB电子书
   enable_epub: true
   
-  # 暂时关闭HTML和LaTeX
-  enable_html: false
-  enable_latex: false
+  # 启用HTML和LaTeX格式  
+  enable_html: true
+  enable_latex: true
 
 # ================== 目录配置 ==================
 directories:
-  # 所有文件保存到demo_downloads目录下
-  txt_download_dir: "demo_downloads/txt"
-  json_backup_dir: "demo_downloads/json"
-  epub_dir: "demo_downloads/epub"
+  # JSON文件存储目录（必须有）
+  bookstore_dir: "demo_downloads/bookstore"
+  
+  # 其他格式文件存储目录
+  download_dir: "demo_downloads/files"
 
 # ================== 下载性能配置 ==================
 performance:

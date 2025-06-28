@@ -6,34 +6,24 @@ formats:
   # 是否下载TXT文件 (默认: true)
   enable_txt: true
   
-  # 是否下载JSON备份文件 (默认: true)  
-  enable_json: true
-  
   # 是否下载EPUB电子书 (默认: false)
-  enable_epub: false
+  enable_epub: true
   
   # 是否下载HTML网页格式 (默认: false)
-  enable_html: false
+  enable_html: true
   
   # 是否下载LaTeX文档格式 (默认: false)
-  enable_latex: false
+  enable_latex: true
 
 # ================== 目录配置 ==================
 directories:
-  # 小说TXT文件存储目录 (相对于src目录)
-  txt_download_dir: "novel_downloads"
-  
   # JSON备份文件存储目录 (相对于src目录)
-  json_backup_dir: "bookstore"
+  # JSON文件会保存在: bookstore_dir/书名-id/书名.json
+  bookstore_dir: "bookstore"
   
-  # EPUB文件存储目录 (相对于src目录)
-  epub_dir: "epub_downloads"
-  
-  # HTML文件存储目录 (相对于src目录)
-  html_dir: "html_downloads"
-  
-  # LaTeX文件存储目录 (相对于src目录)
-  latex_dir: "latex_downloads"
+  # 其他格式文件存储目录 (相对于src目录) 
+  # 所有其他格式文件会保存在: download_dir/书名-id/
+  download_dir: "downloads"
 
 # ================== 下载性能配置 ==================
 performance:

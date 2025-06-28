@@ -28,19 +28,22 @@ def test_multi_format_download():
         print("📄 加载演示配置文件: demo_config.yaml")
         config = Config.from_yaml('demo_config.yaml')
     else:
-        print("📄 使用默认配置（启用TXT和JSON）")
+        print("📄 使用默认配置（启用TXT）")
         config = Config()
         config.enable_txt = True
-        config.enable_json = True
         config.enable_epub = False  # 暂时关闭，避免复杂度
+        config.enable_html = False
+        config.enable_latex = False
         config.thread_count = 4
         config.delay_mode = "fast"
     
     # 显示配置信息
     print(f"\n📋 当前配置:")
     print(f"  ✅ TXT: {config.enable_txt}")
-    print(f"  ✅ JSON: {config.enable_json}")
+    print(f"  ✅ JSON: 必须（已移除开关）")
     print(f"  ✅ EPUB: {config.enable_epub}")
+    print(f"  ✅ HTML: {config.enable_html}")
+    print(f"  ✅ LaTeX: {config.enable_latex}")
     print(f"  ⚡ 线程数: {config.thread_count}")
     print(f"  ⏱️  延时: {config.delay_mode} ({config.delay[0]}-{config.delay[1]}ms)")
     
@@ -52,12 +55,8 @@ def test_multi_format_download():
         
         # 显示目录信息
         print(f"\n📁 输出目录:")
-        if config.enable_txt:
-            print(f"  📄 TXT: {downloader.novel_downloads_dir}")
-        if config.enable_json:
-            print(f"  💾 JSON: {downloader.bookstore_dir}")
-        if config.enable_epub:
-            print(f"  📚 EPUB: {downloader.epub_dir}")
+        print(f"  💾 JSON: {downloader.bookstore_dir}")
+        print(f"  📄 其他格式: {downloader.download_dir}")
         
         # 开始下载
         print(f"\n🔽 开始下载...")
@@ -69,23 +68,23 @@ def test_multi_format_download():
             # 检查生成的文件
             print(f"\n📊 文件检查:")
             
-            # 检查TXT目录
-            if config.enable_txt and os.path.exists(downloader.novel_downloads_dir):
-                txt_files = []
-                for root, dirs, files in os.walk(downloader.novel_downloads_dir):
+            # 检查下载目录（包含TXT、EPUB、HTML、LaTeX文件）
+            if os.path.exists(downloader.download_dir):
+                download_files = []
+                for root, dirs, files in os.walk(downloader.download_dir):
                     for file in files:
-                        if file.endswith('.txt'):
+                        if file.endswith(('.txt', '.epub', '.html', '.tex')):
                             file_path = os.path.join(root, file)
                             file_size = os.path.getsize(file_path)
-                            txt_files.append((file_path, file_size))
+                            download_files.append((file_path, file_size))
                 
-                print(f"  📄 TXT文件 ({len(txt_files)}个):")
-                for file_path, file_size in txt_files:
+                print(f"  📄 下载文件 ({len(download_files)}个):")
+                for file_path, file_size in download_files:
                     rel_path = os.path.relpath(file_path)
                     print(f"    - {rel_path} ({file_size:,} 字节)")
             
             # 检查JSON目录
-            if config.enable_json and os.path.exists(downloader.bookstore_dir):
+            if os.path.exists(downloader.bookstore_dir):
                 json_files = []
                 for root, dirs, files in os.walk(downloader.bookstore_dir):
                     for file in files:
@@ -96,21 +95,6 @@ def test_multi_format_download():
                 
                 print(f"  💾 JSON文件 ({len(json_files)}个):")
                 for file_path, file_size in json_files:
-                    rel_path = os.path.relpath(file_path)
-                    print(f"    - {rel_path} ({file_size:,} 字节)")
-            
-            # 检查EPUB目录（如果启用）
-            if config.enable_epub and os.path.exists(downloader.epub_dir):
-                epub_files = []
-                for root, dirs, files in os.walk(downloader.epub_dir):
-                    for file in files:
-                        if file.endswith('.epub'):
-                            file_path = os.path.join(root, file)
-                            file_size = os.path.getsize(file_path)
-                            epub_files.append((file_path, file_size))
-                
-                print(f"  📚 EPUB文件 ({len(epub_files)}个):")
-                for file_path, file_size in epub_files:
                     rel_path = os.path.relpath(file_path)
                     print(f"    - {rel_path} ({file_size:,} 字节)")
         

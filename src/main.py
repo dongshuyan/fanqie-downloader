@@ -35,17 +35,13 @@ class SaveMode(Enum):
 class Config:
     # 文件格式控制
     enable_txt: bool = True
-    enable_json: bool = True  
     enable_epub: bool = False
     enable_html: bool = False
     enable_latex: bool = False
     
-    # 目录配置
-    txt_download_dir: str = "novel_downloads"
-    json_backup_dir: str = "bookstore"
-    epub_dir: str = "epub_downloads"
-    html_dir: str = "html_downloads"
-    latex_dir: str = "latex_downloads"
+    # 目录配置 (简化版)
+    bookstore_dir: str = "bookstore"    # JSON文件存放目录
+    download_dir: str = "downloads"     # 其他格式文件存放目录
     
     # 性能配置
     thread_count: int = 8
@@ -125,19 +121,15 @@ class Config:
             if 'formats' in data:
                 formats = data['formats']
                 config.enable_txt = formats.get('enable_txt', True)
-                config.enable_json = formats.get('enable_json', True)
                 config.enable_epub = formats.get('enable_epub', False)
                 config.enable_html = formats.get('enable_html', False)
                 config.enable_latex = formats.get('enable_latex', False)
             
-            # 目录配置
+            # 目录配置 (简化版)
             if 'directories' in data:
                 dirs = data['directories']
-                config.txt_download_dir = dirs.get('txt_download_dir', "novel_downloads")
-                config.json_backup_dir = dirs.get('json_backup_dir', "bookstore")
-                config.epub_dir = dirs.get('epub_dir', "epub_downloads")
-                config.html_dir = dirs.get('html_dir', "html_downloads")
-                config.latex_dir = dirs.get('latex_dir', "latex_downloads")
+                config.bookstore_dir = dirs.get('bookstore_dir', "bookstore")
+                config.download_dir = dirs.get('download_dir', "downloads")
             
             # 性能配置
             if 'performance' in data:
@@ -226,12 +218,9 @@ class NovelDownloader:
         self.script_dir = os.path.dirname(os.path.abspath(__file__))
         self.data_dir = os.path.join(self.script_dir, 'data')
         
-        # 使用配置文件中的目录设置
-        self.novel_downloads_dir = os.path.join(self.script_dir, self.config.txt_download_dir)
-        self.bookstore_dir = os.path.join(self.script_dir, self.config.json_backup_dir)
-        self.epub_dir = os.path.join(self.script_dir, self.config.epub_dir)
-        self.html_dir = os.path.join(self.script_dir, self.config.html_dir)
-        self.latex_dir = os.path.join(self.script_dir, self.config.latex_dir)
+        # 使用配置文件中的目录设置 (简化版)
+        self.bookstore_dir = os.path.join(self.script_dir, self.config.bookstore_dir)  # JSON文件目录
+        self.download_dir = os.path.join(self.script_dir, self.config.download_dir)    # 其他格式文件目录
         
         self.record_path = os.path.join(self.data_dir, 'record.json')
         self.config_path = os.path.join(self.data_dir, 'config.json')
@@ -263,21 +252,9 @@ class NovelDownloader:
         """Create necessary directories if they don't exist"""
         os.makedirs(self.data_dir, exist_ok=True)
         
-        # 根据配置创建相应的目录
-        if self.config.enable_txt:
-            os.makedirs(self.novel_downloads_dir, exist_ok=True)
-        
-        if self.config.enable_json:
-            os.makedirs(self.bookstore_dir, exist_ok=True)
-            
-        if self.config.enable_epub:
-            os.makedirs(self.epub_dir, exist_ok=True)
-            
-        if self.config.enable_html:
-            os.makedirs(self.html_dir, exist_ok=True)
-            
-        if self.config.enable_latex:
-            os.makedirs(self.latex_dir, exist_ok=True)
+        # 创建基础目录
+        os.makedirs(self.bookstore_dir, exist_ok=True)  # JSON文件目录（总是需要）
+        os.makedirs(self.download_dir, exist_ok=True)   # 其他格式文件目录
             
         # 如果需要保存日志，创建日志目录
         if self.config.save_log_to_file:
@@ -331,12 +308,12 @@ class NovelDownloader:
 
             # 创建"书名-id"文件夹结构
             book_folder_name = f"{safe_name}-{novel_id}"
-            book_txt_dir = os.path.join(self.novel_downloads_dir, book_folder_name)
-            book_json_dir = os.path.join(self.bookstore_dir, book_folder_name)
-            chapters_dir = os.path.join(book_txt_dir, "Chapters")
+            book_download_dir = os.path.join(self.download_dir, book_folder_name)    # 其他格式文件目录
+            book_json_dir = os.path.join(self.bookstore_dir, book_folder_name)       # JSON文件目录
+            chapters_dir = os.path.join(book_download_dir, "Chapters")
             
             # 创建必需的目录
-            os.makedirs(book_txt_dir, exist_ok=True)
+            os.makedirs(book_download_dir, exist_ok=True)
             os.makedirs(book_json_dir, exist_ok=True) 
             os.makedirs(chapters_dir, exist_ok=True)
             
@@ -392,17 +369,16 @@ class NovelDownloader:
             # 根据配置决定保存哪些格式
             results = []
             
-            # 保存JSON文件（如果启用）
-            if self.config.enable_json:
-                json_path = os.path.join(book_json_dir, f'{safe_name}.json')
-                with open(json_path, 'w', encoding='UTF-8') as f:
-                    json.dump(novel_content, f, ensure_ascii=False, indent=4)
-                self.log_callback(f'✅ JSON文件已保存: {json_path}')
-                results.append('json')
+            # 保存JSON文件（必须要的）
+            json_path = os.path.join(book_json_dir, f'{safe_name}.json')
+            with open(json_path, 'w', encoding='UTF-8') as f:
+                json.dump(novel_content, f, ensure_ascii=False, indent=4)
+            self.log_callback(f'✅ JSON文件已保存: {json_path}')
+            results.append('json')
             
             # 保存TXT文件（如果启用）
             if self.config.enable_txt:
-                result = self._save_single_txt_to_folder(safe_name, novel_content, book_txt_dir)
+                result = self._save_single_txt_to_folder(safe_name, novel_content, book_download_dir)
                 if result == 's':
                     self.log_callback(f'✅ TXT文件已保存')
                     results.append('txt')
@@ -778,7 +754,7 @@ class NovelDownloader:
 
     def _save_single_txt(self, name: str, content: dict) -> str:
         """Save all chapters to a single TXT file"""
-        output_path = os.path.join(self.novel_downloads_dir, f'{name}.txt')  # 修改：保存到novel_downloads目录
+        output_path = os.path.join(self.download_dir, f'{name}.txt')  # 保存到下载目录
         fg = '\n' + self.config.kgf * self.config.kg
 
         with open(output_path, 'w', encoding='UTF-8') as f:
@@ -873,7 +849,7 @@ class NovelDownloader:
 
     def _save_split_txt(self, name: str, content: Dict) -> str:
         """Save each chapter to a separate TXT file"""
-        output_dir = os.path.join(self.novel_downloads_dir, name)  # 修改：保存到novel_downloads目录
+        output_dir = os.path.join(self.download_dir, name)  # 保存到下载目录
         os.makedirs(output_dir, exist_ok=True)
 
         for title, chapter_content in content.items():
@@ -1546,12 +1522,11 @@ def create_cli():
     
     # 显示当前配置摘要
     print(f'\n📋 当前配置摘要:')
-    print(f'  🗂️  输出格式: TXT({config.enable_txt}) JSON({config.enable_json}) EPUB({config.enable_epub}) HTML({config.enable_html}) LaTeX({config.enable_latex})')
+    print(f'  🗂️  输出格式: TXT({config.enable_txt}) JSON(必须) EPUB({config.enable_epub}) HTML({config.enable_html}) LaTeX({config.enable_latex})')
     print(f'  ⚡ 线程数: {config.thread_count}')
     print(f'  ⏱️  延时模式: {config.delay_mode} ({config.delay[0]}-{config.delay[1]}ms)')
-    print(f'  📁 TXT目录: {config.txt_download_dir}')
-    if config.enable_json:
-        print(f'  📁 JSON目录: {config.json_backup_dir}')
+    print(f'  📁 JSON目录: {config.bookstore_dir}')
+    print(f'  📁 下载目录: {config.download_dir}')
     
     downloader = NovelDownloader(config)
 
